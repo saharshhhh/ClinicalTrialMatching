@@ -1,0 +1,13 @@
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.2
+datetime==5.5
+gensim==4.3.3
+langchain
+langchain-huggingface
+langchain-community
+transformers
+torch
+faiss-cpu
+pandas
+python-dotenv
