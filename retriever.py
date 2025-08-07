@@ -14,3 +14,4 @@ def load_retriever():
 def load_dataframe():
     df = pd.read_csv(DATA_PATH)
     return df.fillna("")  # Replace NaN with empty string for safety
+
