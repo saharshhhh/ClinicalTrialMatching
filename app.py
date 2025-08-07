@@ -49,7 +49,7 @@ def ask():
     summary = summarizer(
         to_summarize,
         max_length=180,
-        min_length=30,
+        min_length=20,
         do_sample=False
     )[0]["summary_text"]
 
