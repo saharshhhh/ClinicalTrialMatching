@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Clinical Trials Chatbot</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 2em auto; padding: 1em; }
+    textarea { width: 100%; height: 100px; }
+    button { margin-top: 0.5em; padding: 0.7em 1.5em; font-size: 1em; }
+    #response { margin-top: 1em; white-space: pre-wrap; background: #f0f0f0; padding: 1em; }
+  </style>
+</head>
+<body>
+  <h1>Clinical Trials Chatbot</h1>
+  <form id="queryForm">
+    <textarea id="query" placeholder="Enter your clinical trial question or description here..."></textarea>
+    <br />
+    <button type="submit">Ask</button>
+  </form>
+  <div id="response"></div>
+
+  <script>
+    const form = document.getElementById('queryForm');
+    const responseDiv = document.getElementById('response');
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const query = document.getElementById('query').value.trim();
+      if (!query) return alert("Please enter a question.");
+
+      responseDiv.textContent = "Loading...";
+      try {
+        const res = await fetch('/ask', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ query })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          responseDiv.textContent = "Error: " + (data.error || "Unknown error");
+          return;
+        }
+        responseDiv.innerHTML = `<strong>Trial Title:</strong> ${data.trial_title}<br/><strong>NCT Number:</strong> ${data.nct_number}<br/><br/><strong>Summary:</strong><br/>${data.summary}`;
+      } catch (err) {
+        responseDiv.textContent = "An error occurred. Try again.";
+        console.error(err);
+      }
+    };
+  </script>
+</body>
+</html>

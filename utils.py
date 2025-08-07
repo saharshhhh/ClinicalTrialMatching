@@ -15,12 +15,15 @@ def get_trial_metadata(page_content, df):
     return {}
 
 def build_prompt(user_query, metadata):
-    return (
-        f"User question: {user_query}\n\n"
-        f"Using this clinical trial info:\n"
-        f"Title: {metadata['Study Title']}\n"
-        f"Study Design: {metadata['Study Design']}\n"
-        f"Interventions: {metadata['Interventions']}\n"
-        f"Brief Summary: {metadata['Brief Summary']}\n\n"
-        "Provide a summary of the trial procedure relevant to the question."
-    )
+    return f"""
+User Question:
+{user_query}
+
+Clinical Trial Information:
+Title: {metadata['Study Title']}
+NCT Number: {metadata.get('NCT Number', 'N/A')}
+Study Design: {metadata.get('Study Design', 'Not Available')}
+Intervention: {metadata.get('Interventions', 'Not Available')}
+Brief Summary: {metadata.get('Brief Summary', 'Not Available')}
+
+"""
