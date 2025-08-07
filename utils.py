@@ -15,15 +15,15 @@ def get_trial_metadata(page_content, df):
     return {}
 
 def build_prompt(user_query, metadata):
-    return f"""
-User Question:
+    # Build a clean, minimal prompt to avoid repetition / redundant generation.
+    # Only include essential trial info and the user question
+    return f"""User Question:
 {user_query}
 
 Clinical Trial Information:
-Title: {metadata['Study Title']}
-NCT Number: {metadata.get('NCT Number', 'N/A')}
+Title: {metadata.get('Study Title', 'Not Available')}
+NCT Number: {metadata.get('NCT Number', 'Not Available')}
 Study Design: {metadata.get('Study Design', 'Not Available')}
-Intervention: {metadata.get('Interventions', 'Not Available')}
+Interventions: {metadata.get('Interventions', 'Not Available')}
 Brief Summary: {metadata.get('Brief Summary', 'Not Available')}
-
 """
