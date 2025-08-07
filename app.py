@@ -1,22 +1,23 @@
 import os
 from flask import Flask, render_template, request, jsonify
-from retriever import load_retriever, load_dataframe
-from utils import get_trial_metadata, build_prompt
-from llm import load_local_llm  # Adjust to use your LLM loader (local or HF endpoint)
 
-# Initialize Flask app
+from retriever import load_retriever, load_dataframe
+from utils import get_trial_metadata
+
+# Import the correct model loader
+from llm import load_summarization_model
+
 app = Flask(__name__)
 
-# Global variables (load once at startup)
+# Set paths
 FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "vectorstore")
 DATA_PATH = os.getenv("DATA_PATH", "data/clinicalTrials.csv")
 
-# Load retriever, df, and LLM once to save time on requests
 print("Loading retriever and dataframe...")
 retriever = load_retriever()
 df = load_dataframe()
-print("Loading LLM pipeline...")
-llm = load_local_llm()
+print("Loading summarization model...")
+summarizer = load_summarization_model()
 
 @app.route("/", methods=["GET"])
 def index():
@@ -37,21 +38,26 @@ def ask():
     if not metadata:
         return jsonify({"error": "Matching trial found but details extraction failed."}), 500
 
-    prompt = build_prompt(user_query, metadata)
+    # Only summarize the relevant clinical content (AVOID repetition)
+    to_summarize = (
+        f"Study Design: {metadata.get('Study Design', '')}\n"
+        f"Interventions: {metadata.get('Interventions', '')}\n"
+        f"Brief Summary: {metadata.get('Brief Summary', '')}"
+    )
 
-    # Generate answer
-    if hasattr(llm, "invoke"):  # HuggingFaceEndpoint (async) usage
-        result = llm.invoke(prompt)
-    else:  # transformers pipeline usage
-        result = llm(prompt, max_new_tokens=256)[0]["generated_text"]
+    # Generate the clinical summary (non-redundant!)
+    summary = summarizer(
+        to_summarize,
+        max_length=180,
+        min_length=30,
+        do_sample=False
+    )[0]["summary_text"]
 
     return jsonify({
-        "trial_title": metadata["Study Title"],
+        "trial_title": metadata.get("Study Title", ""),
         "nct_number": metadata.get("NCT Number", "N/A"),
-        "summary": result
+        "summary": summary
     })
 
-
 if __name__ == "__main__":
-    # Run app in debug mode for development
     app.run(host="0.0.0.0", port=5000, debug=True)
