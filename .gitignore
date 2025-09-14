@@ -2,3 +2,5 @@ venv/
 .venv/
 data/clinicalTrials.csv
 data/*.csv
+vectorstore/index.faiss
+vectorstore/index.pkl
