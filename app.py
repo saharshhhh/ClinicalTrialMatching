@@ -38,18 +38,29 @@ def ask():
     if not metadata:
         return jsonify({"error": "Matching trial found but details extraction failed."}), 500
 
-    # Only summarize the relevant clinical content (AVOID repetition)
+    # Only summarize the relevant clinical content
     to_summarize = (
         f"Study Design: {metadata.get('Study Design', '')}\n"
         f"Interventions: {metadata.get('Interventions', '')}\n"
         f"Brief Summary: {metadata.get('Brief Summary', '')}"
     )
 
-    # Generate the clinical summary (non-redundant!)
+    # --- PROMPT ENHANCEMENT ---
+    # This tells the summarizer to produce an expanded, plain-language summary
+    patient_friendly_prompt = (
+        "Rewrite the following clinical trial details so that an average person "
+        "with no deep medical knowledge can understand it. "
+        "Provide a clear, detailed, and easy-to-read explanation of the study’s purpose, "
+        "who it is for, what treatments are being tested, how it is conducted, and "
+        "what outcomes are expected:\n\n"
+        f"{to_summarize}"
+    )
+
+    # Generate the longer patient-friendly summary
     summary = summarizer(
-        to_summarize,
-        max_length=180,
-        min_length=20,
+        patient_friendly_prompt,
+        max_length=512,   # Increased for more elaboration
+        min_length=120,    # Increased minimum to ensure good detail
         do_sample=False
     )[0]["summary_text"]
 

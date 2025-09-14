@@ -10,7 +10,7 @@ from langchain_community.vectorstores import FAISS
 # ----- Settings -----
 DATA_PATH = os.path.join("data", "clinicalTrials.csv")      # Path to your CSV
 FAISS_INDEX_PATH = "vectorstore"                            # Folder to save FAISS index
-SAMPLE_SIZE = 3000                                          # Use a subset for fast dev (None for all rows)
+SAMPLE_SIZE = 100000                                          # Use a subset for fast dev (None for all rows)
 BATCH_SIZE = 128                                            # Adjust for your RAM/CPU
 TRUNCATE_LEN = 300                                          # Truncate to speed up
 DEVICE = "cpu"                                              # Use 'cuda' if you have a supported GPU

@@ -7,11 +7,10 @@ def load_retriever():
     print("Loading retriever from FAISS index...")
     embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = FAISS.load_local(FAISS_INDEX_PATH, embedding_model, allow_dangerous_deserialization=True)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 1})  # top 1 document
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})  # top 4 documents
     print("Retriever loaded.")
     return retriever
 
 def load_dataframe():
     df = pd.read_csv(DATA_PATH)
-    return df.fillna("")  # Replace NaN with empty string for safety
-
+    return df.fillna("")
