@@ -2,16 +2,18 @@ pandas==2.2.2
 numpy==1.26.4
 scikit-learn==1.5.2
 gensim==4.3.3
-faiss-cpu
+weaviate-client>=3.25.0
 langchain
 langchain-huggingface
 langchain-community
+langchain-weaviate
+dotenv
 
 transformers>=4.30.0,<5
 torch>=2.0.0,<3
-faiss-cpu
 
 python-dotenv
 sentence-transformers>=2.2.2,<3
 
 huggingface-hub>=0.23.0
+google-generativeai

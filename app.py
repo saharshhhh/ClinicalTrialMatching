@@ -1,7 +1,7 @@
 import os
 from flask import Flask, render_template, request, jsonify
 
-from retriever import load_retriever, load_dataframe
+from retriever import load_retriever
 from utils import get_trial_metadata
 
 # Import the correct model loader
@@ -9,14 +9,9 @@ from llm import load_summarization_model
 
 app = Flask(__name__)
 
-# Set paths
-FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "vectorstore")
-DATA_PATH = os.getenv("DATA_PATH", "data/clinicalTrials.csv")
-
-print("Loading retriever and dataframe...")
+print("Loading retriever...")
 retriever = load_retriever()
-df = load_dataframe()
-print("Loading summarization model...")
+print("Loading summarization model (Gemini)...")
 summarizer = load_summarization_model()
 
 @app.route("/", methods=["GET"])
@@ -34,7 +29,7 @@ def ask():
         return jsonify({"error": "No matching trials found."}), 404
 
     best_doc = docs[0]
-    metadata = get_trial_metadata(best_doc.page_content, df)
+    metadata = get_trial_metadata(best_doc)
     if not metadata:
         return jsonify({"error": "Matching trial found but details extraction failed."}), 500
 
@@ -45,24 +40,9 @@ def ask():
         f"Brief Summary: {metadata.get('Brief Summary', '')}"
     )
 
-    # --- PROMPT ENHANCEMENT ---
-    # This tells the summarizer to produce an expanded, plain-language summary
-    patient_friendly_prompt = (
-        "Rewrite the following clinical trial details so that an average person "
-        "with no deep medical knowledge can understand it. "
-        "Provide a clear, detailed, and easy-to-read explanation of the study’s purpose, "
-        "who it is for, what treatments are being tested, how it is conducted, and "
-        "what outcomes are expected:\n\n"
-        f"{to_summarize}"
-    )
-
-    # Generate the longer patient-friendly summary
-    summary = summarizer(
-        patient_friendly_prompt,
-        max_length=512,   # Increased for more elaboration
-        min_length=120,    # Increased minimum to ensure good detail
-        do_sample=False
-    )[0]["summary_text"]
+    # Call Gemini summarizer
+    # The system prompt is already embedded in llm.py
+    summary = summarizer(to_summarize)
 
     return jsonify({
         "trial_title": metadata.get("Study Title", ""),
