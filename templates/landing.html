@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TrialBridge — Clinical Trial Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --teal-dark: #0f766e;
+    --navy: #0f172a;
+    --slate: #334155;
+    --muted: #64748b;
+    --bg: #f8fafc;
+    --white: #ffffff;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Background ── */
+  .hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(13,148,136,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(13,148,136,0.06) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  /* grid pattern */
+  .hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(13,148,136,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(13,148,136,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    max-width: 680px;
+  }
+
+  .badge {
+    display: inline-block;
+    background: var(--teal-light);
+    color: var(--teal-dark);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 16px;
+    border-radius: 100px;
+    margin-bottom: 28px;
+    border: 1px solid rgba(13,148,136,0.2);
+  }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(42px, 7vw, 72px);
+    font-weight: 900;
+    color: var(--navy);
+    line-height: 1.05;
+    margin-bottom: 20px;
+    letter-spacing: -0.02em;
+  }
+
+  h1 span {
+    color: var(--teal);
+  }
+
+  .subtitle {
+    font-size: 18px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 56px;
+    font-weight: 300;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ── Role Cards ── */
+  .cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    width: 100%;
+    max-width: 620px;
+  }
+
+  .card {
+    background: var(--white);
+    border: 1.5px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 36px 28px;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    transition: all 0.25s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--teal);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+  }
+
+  .card:hover {
+    border-color: var(--teal);
+    box-shadow: 0 20px 40px rgba(13,148,136,0.12);
+    transform: translateY(-4px);
+  }
+
+  .card:hover::before { transform: scaleX(1); }
+
+  .card-icon {
+    width: 52px;
+    height: 52px;
+    background: var(--teal-light);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    font-size: 24px;
+  }
+
+  .card-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 10px;
+  }
+
+  .card-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+    font-weight: 300;
+    margin-bottom: 24px;
+    flex: 1;
+  }
+
+  .card-cta {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--teal);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.02em;
+  }
+
+  .card-cta::after {
+    content: '→';
+    transition: transform 0.2s;
+  }
+
+  .card:hover .card-cta::after { transform: translateX(4px); }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 13px;
+    color: var(--muted);
+    border-top: 1px solid #e2e8f0;
+  }
+
+  @media (max-width: 520px) {
+    .cards { grid-template-columns: 1fr; }
+  }
+
+  /* ── Animations ── */
+  .hero-content > * {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeUp 0.6s ease forwards;
+  }
+  .badge { animation-delay: 0.1s; }
+  h1 { animation-delay: 0.2s; }
+  .subtitle { animation-delay: 0.3s; margin-bottom: 56px; }
+  .cards { animation-delay: 0.4s; }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="badge">Clinical Trial Platform</div>
+    <h1>Connecting <span>Patients</span><br>with Science</h1>
+    <p class="subtitle">TrialBridge makes clinical trial participation simple, transparent, and human — for both patients and researchers.</p>
+
+    <div class="cards">
+      <a href="/patient" class="card">
+        <div class="card-icon">🧑‍⚕️</div>
+        <div class="card-title">I'm a Patient</div>
+        <p class="card-desc">Explore clinical trials, ask questions, and decide if you'd like to participate — at your own pace.</p>
+        <span class="card-cta">Enter Patient Portal</span>
+      </a>
+
+      <a href="/doctor" class="card">
+        <div class="card-icon">🔬</div>
+        <div class="card-title">I'm a Doctor / Scientist</div>
+        <p class="card-desc">View consented patients, manage trial enrollment, and get AI-powered research assistance.</p>
+        <span class="card-cta">Enter Research Portal</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  © 2024 TrialBridge · Connecting patients and researchers with transparency
+</footer>
+
+</body>
+</html>

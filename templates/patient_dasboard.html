@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>My Trial Status — TrialBridge</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: #f1f5f9; min-height: 100vh; }
+  nav { background: #0f172a; padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+  .nav-brand { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: white; }
+  .nav-brand span { color: #0d9488; }
+  .nav-back { color: #94a3b8; text-decoration: none; font-size: 13px; }
+  .nav-back:hover { color: white; }
+
+  .container { max-width: 700px; margin: 40px auto; padding: 0 24px; }
+  h2 { font-family: 'Playfair Display', serif; font-size: 26px; color: #0f172a; margin-bottom: 6px; }
+  .sub { color: #64748b; font-size: 14px; margin-bottom: 32px; }
+
+  /* Lookup form */
+  .lookup-box { background: white; padding: 28px; border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 32px; }
+  .lookup-box h3 { font-size: 16px; font-weight: 500; color: #0f172a; margin-bottom: 16px; }
+  input { width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 14px; margin-bottom: 12px; }
+  .btn { padding: 10px 20px; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 500; width: 100%; }
+  .btn:hover { background: #0f766e; }
+
+  /* Status cards */
+  .status-card { background: white; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+  .status-card.enrolled { border-color: #7c3aed; }
+  .status-card.accepted { border-color: #10b981; }
+  .status-card.rejected { border-color: #ef4444; opacity: 0.7; }
+
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .trial-name { font-weight: 600; font-size: 16px; color: #0f172a; }
+  .chip { font-size: 11px; font-weight: 500; padding: 4px 12px; border-radius: 100px; white-space: nowrap; }
+  .chip.enrolled { background: #ede9fe; color: #7c3aed; }
+  .chip.accepted { background: #ecfdf5; color: #10b981; }
+  .chip.rejected { background: #fef2f2; color: #ef4444; }
+
+  .meta { font-size: 13px; color: #64748b; margin-bottom: 14px; }
+
+  .contact-box { background: #f8fafc; border-radius: 10px; padding: 14px; margin-top: 12px; }
+  .contact-box h4 { font-size: 13px; font-weight: 600; color: #0f172a; margin-bottom: 8px; }
+  .contact-item { font-size: 13px; color: #334155; margin-bottom: 4px; }
+  .message-box { background: #fffbeb; border-left: 3px solid #f59e0b; padding: 10px 14px; border-radius: 6px; margin-top: 10px; font-size: 13px; color: #92400e; }
+
+  .empty { text-align: center; padding: 48px 24px; color: #64748b; }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-back">← Back to Home</a>
+  <div class="nav-brand">Trial<span>Bridge</span></div>
+  <span></span>
+</nav>
+
+<div class="container">
+  <h2>My Trial Status</h2>
+  <p class="sub">Check the status of your clinical trial applications and enrollment.</p>
+
+  <!-- Lookup Form -->
+  <div class="lookup-box">
+    <h3>🔍 Look up your status</h3>
+    <form method="GET" action="/my-status">
+      <input type="text"  name="name"  placeholder="Your Name"  value="{{ name }}"  required>
+      <input type="email" name="email" placeholder="Your Email" value="{{ email }}" required>
+      <button type="submit" class="btn">Check My Status</button>
+    </form>
+  </div>
+
+  <!-- Results -->
+  {% if email %}
+    {% if enrollments %}
+      <h3 style="font-size:15px; font-weight:500; color:#0f172a; margin-bottom:16px;">
+        Found {{ enrollments|length }} application(s) for {{ name }}
+      </h3>
+
+      {% for e in enrollments %}
+      <div class="status-card {{ 'enrolled' if e.enrolled else e.decision }}">
+        <div class="card-header">
+          <div class="trial-name">{{ e.trial_title }}</div>
+          {% if e.enrolled %}
+            <span class="chip enrolled">★ Enrolled</span>
+          {% elif e.decision == 'accepted' %}
+            <span class="chip accepted">✓ Consent Given</span>
+          {% else %}
+            <span class="chip rejected">✕ Declined</span>
+          {% endif %}
+        </div>
+
+        <div class="meta">
+          Submitted: {{ e.timestamp }}<br>
+          Condition: {{ e.condition }}
+        </div>
+
+        {% if e.enrolled %}
+        <div class="contact-box">
+          <h4>📋 Your Researcher Contact</h4>
+          {% if e.doctor_name %}
+          <div class="contact-item">👤 <strong>{{ e.doctor_name }}</strong></div>
+          {% endif %}
+          {% if e.doctor_email %}
+          <div class="contact-item">📧 <a href="mailto:{{ e.doctor_email }}" style="color:#0d9488;">{{ e.doctor_email }}</a></div>
+          {% endif %}
+          {% if e.doctor_phone %}
+          <div class="contact-item">📞 {{ e.doctor_phone }}</div>
+          {% endif %}
+          {% if e.doctor_msg %}
+          <div class="message-box">💬 "{{ e.doctor_msg }}"</div>
+          {% endif %}
+        </div>
+        {% elif e.decision == 'accepted' %}
+        <div style="background:#ecfdf5; padding:12px 14px; border-radius:8px; font-size:13px; color:#065f46;">
+          ✅ Your consent has been received. A researcher will review your application and contact you soon.
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+    {% else %}
+      <div class="empty">
+        <div class="empty-icon">📭</div>
+        <p>No applications found for <strong>{{ email }}</strong>.<br>
+        Please make sure you used the same email when signing up.</p>
+      </div>
+    {% endif %}
+  {% endif %}
+
+</div>
+</body>
+</html>

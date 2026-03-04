@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Research Portal — TrialBridge</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --teal: #0d9488; --teal-light: #ccfbf1; --teal-dark: #0f766e;
+    --navy: #0f172a; --slate: #334155; --muted: #64748b;
+    --bg: #f1f5f9; --white: #ffffff; --border: #e2e8f0;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --amber: #f59e0b; --amber-light: #fffbeb;
+    --green: #10b981; --green-light: #ecfdf5;
+    --red: #ef4444; --red-light: #fef2f2;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); height: 100vh; display: flex; flex-direction: column; }
+
+  nav {
+    background: var(--navy);
+    padding: 0 24px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .nav-brand { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: white; text-decoration: none; }
+  .nav-brand span { color: var(--teal); }
+  .nav-badge { background: rgba(13,148,136,0.2); color: #5eead4; font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 100px; border: 1px solid rgba(13,148,136,0.3); }
+  .nav-back { color: #94a3b8; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 4px; transition: color 0.2s; }
+  .nav-back:hover { color: white; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Main Panel ── */
+  .main-panel { overflow-y: auto; padding: 28px; }
+
+  .panel-title { font-family: 'Playfair Display', serif; font-size: 24px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+  .panel-sub { font-size: 14px; color: var(--muted); margin-bottom: 24px; font-weight: 300; }
+
+  /* Stats Row */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card {
+    background: var(--white); border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .stat-num { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: var(--navy); }
+  .stat-label { font-size: 13px; color: var(--muted); }
+  .stat-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+  /* Section */
+  .section-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .section-title { font-size: 16px; font-weight: 500; color: var(--navy); }
+  .section-badge { font-size: 12px; background: var(--teal-light); color: var(--teal-dark); padding: 3px 10px; border-radius: 100px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--border); padding: 4px; border-radius: 12px; }
+  .tab {
+    flex: 1; text-align: center; padding: 9px; border-radius: 9px; font-size: 13px;
+    font-weight: 500; cursor: pointer; transition: all 0.2s; border: none;
+    font-family: inherit; background: transparent; color: var(--muted);
+  }
+  .tab.active { background: var(--white); color: var(--navy); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Consent Card */
+  .consent-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 14px;
+    padding: 20px 22px; margin-bottom: 12px; transition: box-shadow 0.2s;
+  }
+  .consent-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
+  .consent-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .patient-name { font-weight: 500; font-size: 16px; color: var(--navy); }
+  .patient-email { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .status-chip {
+    font-size: 11px; font-weight: 500; padding: 4px 10px; border-radius: 100px;
+    white-space: nowrap;
+  }
+  .status-chip.accepted { background: var(--green-light); color: var(--green); }
+  .status-chip.rejected { background: var(--red-light); color: var(--red); }
+  .status-chip.enrolled { background: var(--purple-light); color: var(--purple); }
+
+  .consent-meta { font-size: 13px; color: var(--slate); margin-bottom: 14px; }
+  .consent-meta strong { color: var(--navy); }
+
+  .btn-enroll {
+    background: var(--teal); color: white; border: none; border-radius: 9px;
+    padding: 9px 18px; font-family: inherit; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-enroll:hover { background: var(--teal-dark); }
+  .btn-enroll:disabled { background: var(--muted); cursor: default; }
+
+  /* Trial Cards for doctor */
+  .trial-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 14px;
+    padding: 20px 22px; margin-bottom: 12px;
+  }
+  .trial-title { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .trial-desc { font-size: 13px; color: var(--slate); line-height: 1.6; font-weight: 300; margin-bottom: 12px; }
+  .trial-meta { display: flex; gap: 14px; flex-wrap: wrap; }
+  .meta-item { font-size: 12px; color: var(--muted); }
+  .meta-item strong { color: var(--slate); }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+
+  /* ── Chat Panel (same as patient, dark theme) ── */
+  .chat-panel {
+    background: var(--navy); border-left: 1px solid rgba(255,255,255,0.08);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .chat-header {
+    padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+  .chat-avatar {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--teal), #0891b2);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .chat-header-info h3 { font-size: 15px; font-weight: 500; color: white; }
+  .chat-header-info p { font-size: 12px; color: #64748b; }
+  .online-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+  .chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+
+  .message { display: flex; gap: 10px; animation: msgIn 0.3s ease; }
+  .message.user { flex-direction: row-reverse; }
+  @keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .msg-avatar { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; background: rgba(255,255,255,0.1); margin-top: 2px; }
+  .message.user .msg-avatar { background: var(--teal); }
+  .msg-bubble { background: rgba(255,255,255,0.07); border-radius: 16px 16px 16px 4px; padding: 12px 16px; font-size: 14px; line-height: 1.6; color: #cbd5e1; max-width: calc(100% - 44px); }
+  .message.user .msg-bubble { background: var(--teal); color: white; border-radius: 16px 16px 4px 16px; }
+  .msg-time { font-size: 11px; color: #475569; margin-top: 4px; }
+
+  .typing-indicator { display: flex; gap: 5px; align-items: center; padding: 14px 16px; }
+  .typing-indicator span { width: 7px; height: 7px; background: #475569; border-radius: 50%; animation: bounce 1.2s infinite; }
+  .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+
+  .quick-prompts { padding: 0 16px 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .quick-btn { font-size: 12px; color: var(--teal); border: 1px solid rgba(13,148,136,0.3); background: rgba(13,148,136,0.1); border-radius: 100px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+  .quick-btn:hover { background: var(--teal); color: white; border-color: var(--teal); }
+
+  .chat-input-area { padding: 16px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 10px; flex-shrink: 0; }
+  .chat-input { flex: 1; border: 1.5px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 11px 16px; font-family: inherit; font-size: 14px; color: white; background: rgba(255,255,255,0.06); outline: none; transition: border-color 0.2s; resize: none; height: 44px; }
+  .chat-input::placeholder { color: #475569; }
+  .chat-input:focus { border-color: var(--teal); }
+  .chat-send { width: 44px; height: 44px; background: var(--teal); border: none; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+  .chat-send:hover { background: var(--teal-dark); transform: scale(1.05); }
+  .chat-send svg { width: 18px; height: 18px; fill: white; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-back">← Back</a>
+  <a href="/" class="nav-brand">Trial<span>Bridge</span></a>
+  <span class="nav-badge">Research Portal</span>
+</nav>
+
+<div class="layout">
+  <!-- Main Panel -->
+  <div class="main-panel">
+    <h2 class="panel-title">Research Dashboard</h2>
+    <p class="panel-sub">Manage patient consents, enroll participants, and oversee your clinical trials.</p>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-num" id="statTotal">{{ consents|length }}</div>
+        <div class="stat-label"><span class="stat-dot" style="background:#10b981"></span>Patients Consented</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">{{ active_trials }}</div>
+        <div class="stat-label"><span class="stat-dot" style="background:#0d9488"></span>Active Trials</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statEnrolled">{{ enrolled_count }}</div>
+        <div class="stat-label"><span class="stat-dot" style="background:#7c3aed"></span>Enrolled Patients</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('consents', this)">🧑‍⚕️ Consented Patients</button>
+      <button class="tab" onclick="switchTab('trials', this)">🔬 All Trials</button>
+    </div>
+
+    <!-- Consented Patients Tab -->
+    <div class="tab-content active" id="tab-consents">
+      {% if consents %}
+        {% for c in consents %}
+        <div class="consent-card" id="ccard-{{ loop.index }}">
+          <div class="consent-card-header">
+            <div>
+              <div class="patient-name">{{ c.patient_name }}</div>
+              <div class="patient-email">{{ c.patient_email }}</div>
+            </div>
+            <span class="status-chip accepted" id="chip-{{ loop.index }}">✓ Consented</span>
+          </div>
+          <div class="consent-meta">
+            Trial: <strong>{{ c.trial_title }}</strong><br>
+            Submitted: {{ c.timestamp }}
+          </div>
+          <button class="btn-enroll" id="enroll-btn-{{ loop.index }}"
+            onclick="enrollPatient('{{ c.patient_email }}_{{ c.trial_id }}', {{ loop.index }})">
+            Enroll in Trial
+          </button>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <p>No patients have consented yet.<br>
+          Share the patient portal link so patients can review and consent to trials.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- All Trials Tab -->
+    <div class="tab-content" id="tab-trials">
+      {% for trial in trials %}
+      <div class="trial-card">
+        <div class="trial-title">{{ trial.title }}</div>
+        <p class="trial-desc">{{ trial.description }}</p>
+        <div class="trial-meta">
+          <span class="meta-item">🏷 <strong>{{ trial.phase }}</strong></span>
+          <span class="meta-item">⏱ <strong>{{ trial.duration }}</strong></span>
+          <span class="meta-item">💰 <strong>{{ trial.compensation }}</strong></span>
+          <span class="meta-item">📍 <strong>{{ trial.location }}</strong></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <!-- Chatbot Panel -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="chat-avatar">🔬</div>
+      <div class="chat-header-info">
+        <h3><span class="online-dot"></span>Research Assistant</h3>
+        <p>AI-powered clinical research support</p>
+      </div>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="message">
+        <div class="msg-avatar">🔬</div>
+        <div>
+          <div class="msg-bubble">Hello! I'm your research assistant. I can help with trial protocols, patient eligibility criteria, enrollment strategies, and data interpretation. What would you like to know?</div>
+          <div class="msg-time">Now</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="quick-prompts">
+      <button class="quick-btn" onclick="quickAsk('What are best practices for patient recruitment?')">Recruitment tips</button>
+      <button class="quick-btn" onclick="quickAsk('How do I assess patient eligibility?')">Eligibility criteria</button>
+      <button class="quick-btn" onclick="quickAsk('What is informed consent?')">Informed consent</button>
+    </div>
+
+    <div class="chat-input-area">
+      <textarea class="chat-input" id="chatInput" placeholder="Ask about trials, protocols, patients..." rows="1"
+        onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendMessage();}"></textarea>
+      <button class="chat-send" onclick="sendMessage()">
+        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let chatHistory = [];
+  let enrolledCount = 0;
+
+  function now() { return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+
+  function switchTab(tab, btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+  }
+
+  function appendMessage(role, text) {
+    const box = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = 'message ' + (role === 'user' ? 'user' : '');
+    div.innerHTML = `
+      <div class="msg-avatar">${role === 'user' ? '👨‍⚕️' : '🔬'}</div>
+      <div>
+        <div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>
+        <div class="msg-time">${now()}</div>
+      </div>`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function showTyping() {
+    const box = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = 'message'; div.id = 'typing';
+    div.innerHTML = `<div class="msg-avatar">🔬</div><div class="msg-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function removeTyping() { const t = document.getElementById('typing'); if (t) t.remove(); }
+
+  async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    appendMessage('user', text);
+    chatHistory.push({role:'user', content: text});
+    showTyping();
+
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({messages: chatHistory, role: 'doctor'})
+      });
+      const data = await res.json();
+      removeTyping();
+      appendMessage('assistant', data.reply);
+      chatHistory.push({role:'assistant', content: data.reply});
+    } catch(e) {
+      removeTyping();
+      appendMessage('assistant', 'Connection error. Please try again.');
+    }
+  }
+
+  function quickAsk(q) {
+    document.getElementById('chatInput').value = q;
+    sendMessage();
+  }
+
+  async function enrollPatient(key, idx) {
+    console.log("Enrolling with key:", key);
+    const res = await fetch('/enroll', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({key: key})
+    });
+    const data = await res.json();
+    console.log("Enroll response:", data);
+    if (data.status === 'enrolled') {
+      document.getElementById('chip-' + idx).className = 'status-chip enrolled';
+      document.getElementById('chip-' + idx).textContent = '★ Enrolled';
+      const btn = document.getElementById('enroll-btn-' + idx);
+      btn.disabled = true;
+      btn.textContent = 'Enrolled ✓';
+      enrolledCount++;
+      document.getElementById('statEnrolled').textContent = enrolledCount;
+    } else {
+      alert('Enrollment failed: ' + (data.message || 'Unknown error'));
+    }
+  }
+</script>
+</body>
+</html>
