@@ -1,1 +1,5 @@
-trails.csv 
+trials.csv
+.venv/
+__pycache__/
+*.pyc
+.env

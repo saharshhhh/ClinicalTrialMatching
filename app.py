@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+from werkzeug.security import generate_password_hash, check_password_hash
 import csv
 import os
 from datetime import datetime
@@ -9,14 +10,15 @@ app.secret_key = "supersecretkey"
 # ── In-memory stores ────────────────────────────────────────────────────────
 CONSENTS = []
 PATIENTS = []
+DOCTORS = []
 
 
 # ── Load trials from CSV ────────────────────────────────────────────────────
 def load_trials():
     trials = []
-    csv_path = os.path.join(os.path.dirname(__file__), 'trails.csv')
+    csv_path = os.path.join(os.path.dirname(__file__), 'trials.csv')
     if not os.path.exists(csv_path):
-        print(f"WARNING: trails.csv not found at {csv_path}")
+        print(f"WARNING: trials.csv not found at {csv_path}")
         return []
     with open(csv_path, newline='', encoding='utf-8') as f:
         reader = csv.DictReader(f)
@@ -41,6 +43,16 @@ TRIALS = ALL_TRIALS  # show all in lists
 ACTIVE_TRIALS = [t for t in ALL_TRIALS if t["status"] in ("RECRUITING", "NOT_YET_RECRUITING")]
 print(f"[STARTUP] Loaded {len(ALL_TRIALS)} total trials, {len(ACTIVE_TRIALS)} active")
 
+print("[STARTUP] Building TF-IDF model for semantic matching...")
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+tfidf_vectorizer = TfidfVectorizer(stop_words='english')
+# Compute embeddings for all trials
+tfidf_matrix = tfidf_vectorizer.fit_transform([str(t.get("condition") or "") for t in ALL_TRIALS])
+print("[STARTUP] TF-IDF model built successfully.")
+
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
@@ -48,25 +60,144 @@ print(f"[STARTUP] Loaded {len(ALL_TRIALS)} total trials, {len(ACTIVE_TRIALS)} ac
 def home():
     return render_template("landing.html")
 
+@app.route("/patient_login", methods=["GET", "POST"])
+def patient_login():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        patient = next((p for p in PATIENTS if p["email"] == email), None)
+        if patient and check_password_hash(patient.get("password", ""), password):
+            session["role"] = "patient"
+            session["email"] = email
+            session["name"] = patient["name"]
+            session["condition"] = patient.get("condition", "")
+            return redirect(url_for("patient"))
+        else:
+            return "Invalid credentials. Please try again.", 401
+    return render_template("patient_login.html")
+
+@app.route("/patient_signup", methods=["GET", "POST"])
+def patient_signup():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        condition = request.form.get("condition", "").strip()
+        password = request.form.get("password", "")
+        
+        if any(p["email"] == email for p in PATIENTS):
+            return "Email already exists. Please log in.", 400
+            
+        PATIENTS.append({
+            "name": name, 
+            "email": email, 
+            "condition": condition,
+            "password": generate_password_hash(password)
+        })
+        session["role"] = "patient"
+        session["email"] = email
+        session["name"] = name
+        session["condition"] = condition
+        return redirect(url_for("patient"))
+    return render_template("patient_signup.html")
+
+@app.route("/doctor_login", methods=["GET", "POST"])
+def doctor_login():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        doctor = next((d for d in DOCTORS if d["email"] == email), None)
+        if doctor and check_password_hash(doctor.get("password", ""), password):
+            session["role"] = "doctor"
+            session["email"] = email
+            session["name"] = doctor["name"]
+            return redirect(url_for("doctor"))
+        else:
+            return "Invalid credentials. Please try again.", 401
+    return render_template("doctor_login.html")
+
+@app.route("/doctor_signup", methods=["GET", "POST"])
+def doctor_signup():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        organization = request.form.get("organization", "").strip()
+        password = request.form.get("password", "")
+        
+        if any(d["email"] == email for d in DOCTORS):
+            return "Email already exists. Please log in.", 400
+            
+        DOCTORS.append({
+            "name": name, 
+            "email": email, 
+            "organization": organization,
+            "password": generate_password_hash(password)
+        })
+        session["role"] = "doctor"
+        session["email"] = email
+        session["name"] = name
+        return redirect(url_for("doctor"))
+    return render_template("doctor_signup.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("home"))
+
 
 @app.route("/patient", methods=["GET", "POST"])
 def patient():
+    if session.get("role") != "patient":
+        return redirect(url_for("patient_login"))
+        
     if request.method == "POST":
-        name      = request.form.get("name", "").strip()
-        email     = request.form.get("email", "").strip()
-        condition = request.form.get("condition", "").strip()
+        session["condition"] = request.form.get("condition", "").strip()
+        session["age"] = request.form.get("age", "").strip()
+        session["gender"] = request.form.get("gender", "").strip()
 
-        if not any(p["email"] == email for p in PATIENTS):
-            PATIENTS.append({"name": name, "email": email, "condition": condition})
+    name = session.get("name", "")
+    email = session.get("email", "")
+    condition = session.get("condition", "")
+    age = session.get("age", "")
+    gender = session.get("gender", "")
 
-        user_condition = condition.lower()
-        filtered = [t for t in TRIALS if user_condition in t.get("condition", "").lower()]
-        trials_to_show = filtered[:10] if filtered else TRIALS[:10]
+    user_condition = condition.lower()
+    
+    # Matching algorithm
+    filtered = []
+    if user_condition or age or gender:
+        query_text = " ".join(filter(None, [user_condition, gender]))
+        
+        age_group = ""
+        if age and age.isdigit():
+            age_int = int(age)
+            if age_int < 18:
+                age_group = "CHILD"
+            elif age_int >= 65:
+                age_group = "OLDER_ADULT"
+            else:
+                age_group = "ADULT"
 
-        return render_template("patient.html",
-            name=name, email=email, condition=condition, trials=trials_to_show)
+        if query_text:
+            # Semantic search using TF-IDF cosine similarity
+            query_vec = tfidf_vectorizer.transform([query_text.lower()])
+            sims = cosine_similarity(query_vec, tfidf_matrix).flatten()
+            
+            # Get top matches where similarity is > 0, ordered by best match
+            top_indices = np.argsort(sims)[::-1]
+            
+            for idx in top_indices:
+                trial = ALL_TRIALS[idx]
+                if age_group and trial.get("eligibility") and age_group not in trial.get("eligibility", ""):
+                    continue
+                if sims[idx] > 0.01:
+                    filtered.append(trial)
+                if len(filtered) >= 15:
+                    break
+    
+    trials_to_show = filtered if filtered else TRIALS[:15]
 
-    return render_template("patient.html", name="", email="", condition="", trials=None)
+    return render_template("patient.html",
+        name=name, email=email, condition=condition, age=age, gender=gender, trials=trials_to_show)
 
 
 @app.route("/consent", methods=["POST"])
@@ -125,20 +256,45 @@ def enroll():
     return jsonify({"status": "error", "message": f"Record not found for key: {key}"}), 404
 
 
-@app.route("/doctor")
+@app.route("/doctor", methods=["GET", "POST"])
 def doctor():
+    if session.get("role") != "doctor":
+        return redirect(url_for("doctor_login"))
+
     accepted       = [c for c in CONSENTS if c["decision"] == "accepted"]
     enrolled_count = len([c for c in CONSENTS if c.get("enrolled")])
-    active_trials  = len(set(c["trial_id"] for c in accepted)) if accepted else 0
+    # active_trials  = len(set(c["trial_id"] for c in accepted)) if accepted else 0
+    
+    search_query = ""
+    trials_to_show = TRIALS[:50]
+    
+    if request.method == "POST":
+        search_query = request.form.get("search_query", "").strip()
+        if search_query:
+            query_vec = tfidf_vectorizer.transform([search_query.lower()])
+            sims = cosine_similarity(query_vec, tfidf_matrix).flatten()
+            top_indices = np.argsort(sims)[::-1]
+            
+            filtered = []
+            for idx in top_indices:
+                if sims[idx] > 0.01:
+                    filtered.append(ALL_TRIALS[idx])
+                if len(filtered) >= 50:
+                    break
+            if filtered:
+                trials_to_show = filtered
 
-    print(f"[DOCTOR PAGE] Showing {len(accepted)} accepted consents")
+    print(f"[DOCTOR PAGE] Showing {len(accepted)} accepted consents. Search query: '{search_query}'")
 
+    # Pass the consents for enrolled count lookup in template
     return render_template("doctor.html",
-        trials         = TRIALS,
+        trials         = trials_to_show,
         consents       = accepted,
         enrolled_count = enrolled_count,
         active_trials  = len(ACTIVE_TRIALS),   # ← only recruiting trials
         patient_count  = len(PATIENTS),
+        search_query   = search_query,
+        all_consents   = CONSENTS,
     )
 
 
@@ -156,6 +312,7 @@ def debug():
 @app.route("/chat", methods=["POST"])
 def chat():
     import json as json_lib
+    import markdown
     import urllib.request
     import urllib.error
     import ssl
@@ -177,17 +334,21 @@ def chat():
             "You are a compassionate clinical trial assistant helping patients understand clinical trials. "
             "Explain everything in simple friendly language. Help patients understand what participation involves, "
             "what consent means, risks and benefits. Be warm, empathetic and never pushy. "
+            # "under the title of the clinical trial provide the specific nct number of the trial"
             "Always recommend consulting their doctor for medical decisions. "
             "Give clear, helpful answers to any question.\n\n"
             "Available trials on this platform:\n" + trial_context
         )
     else:
         preamble = (
+            
             "You are an expert clinical research assistant for doctors and scientists. "
             "Help with trial protocols, patient eligibility, enrollment strategies, "
-            "adverse event reporting, and research data interpretation. "
+            # "under the title of the clinical trial provide the specific nct number of the trial"
+            "adverse event reporting, and research data interpretation."
             "Be precise, evidence-based and professional.\n\n"
             "Available trials on this platform:\n" + trial_context
+            
         )
 
     # Build chat history for Cohere format
@@ -206,7 +367,6 @@ def chat():
         "message": last_message,
         "chat_history": chat_history,
         "preamble": preamble,
-        "max_tokens": 300,
         "temperature": 0.7,
     }).encode("utf-8")
 
@@ -228,7 +388,8 @@ def chat():
         with urllib.request.urlopen(req, context=ctx, timeout=60) as resp:
             result = json_lib.loads(resp.read().decode("utf-8"))
             reply = result["text"]
-            return jsonify({"reply": reply})
+            html_reply = markdown.markdown(reply)
+            return jsonify({"reply": html_reply})
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
         print(f"[CHAT ERROR] HTTP {e.code}: {body}")
@@ -238,30 +399,30 @@ def chat():
         return jsonify({"reply": f"AI unavailable: {e}"})
 
 
-@app.route("/test-groq")
-def test_groq():
-    """Visit /test-groq to check if Groq API is reachable."""
-    import urllib.request, json as j, ssl
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
-        return jsonify({"status": "error", "message": "GROQ_API_KEY is empty in app.py"})
-    payload = j.dumps({
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "user", "content": "Say hello in one word."}],
-        "max_tokens": 10,
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        "https://api.groq.com/openai/v1/chat/completions",
-        data=payload,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}", "User-Agent": "TrialBridge/1.0"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, context=ssl.create_default_context(), timeout=15) as resp:
-            result = j.loads(resp.read().decode("utf-8"))
-            return jsonify({"status": "success", "reply": result["choices"][0]["message"]["content"]})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
+# @app.route("/test-groq")
+# def test_groq():
+#     """Visit /test-groq to check if Groq API is reachable."""
+#     import urllib.request, json as j, ssl
+#     api_key = os.environ.get("GROQ_API_KEY", "")
+#     if not api_key:
+#         return jsonify({"status": "error", "message": "GROQ_API_KEY is empty in app.py"})
+#     payload = j.dumps({
+#         "model": "llama-3.3-70b-versatile",
+#         "messages": [{"role": "user", "content": "Say hello in one word."}],
+#         "max_tokens": 10,
+#     }).encode("utf-8")
+#     req = urllib.request.Request(
+#         "https://api.groq.com/openai/v1/chat/completions",
+#         data=payload,
+#         headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}", "User-Agent": "TrialBridge/1.0"},
+#         method="POST",
+#     )
+#     try:
+#         with urllib.request.urlopen(req, context=ssl.create_default_context(), timeout=15) as resp:
+#             result = j.loads(resp.read().decode("utf-8"))
+#             return jsonify({"status": "success", "reply": result["choices"][0]["message"]["content"]})
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": str(e)})
 
 
 
