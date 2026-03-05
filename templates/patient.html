@@ -168,6 +168,8 @@
         const PATIENT_NAME = {{ name | tojson }};
         const PATIENT_EMAIL = {{ email | tojson }};
         const PATIENT_CONDITION = {{ condition | tojson }};
+        const PATIENT_AGE = {{ age | tojson }};
+        const PATIENT_GENDER = {{ gender | tojson }};
       </script>
 
       <!-- SHOW TRIALS AFTER FORM -->
@@ -256,7 +258,9 @@
           decision: decision,
           name: PATIENT_NAME,
           email: PATIENT_EMAIL,
-          condition: PATIENT_CONDITION
+          condition: PATIENT_CONDITION,
+          age: PATIENT_AGE,
+          gender: PATIENT_GENDER
         })
       });
 

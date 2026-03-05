@@ -646,6 +646,20 @@
             <div>
               <div class="patient-name">{{ c.patient_name }}</div>
               <div class="patient-email">{{ c.patient_email }}</div>
+              <div class="patient-details"
+                style="font-size: 12px; color: var(--slate); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap;">
+                {% if c.patient_age or c.patient_gender or c.condition %}
+                {% if c.patient_age %}<span
+                  style="background:var(--bg); padding:2px 6px; border-radius:4px; border:1px solid var(--border);">Age:
+                  {{ c.patient_age }}</span>{% endif %}
+                {% if c.patient_gender %}<span
+                  style="background:var(--bg); padding:2px 6px; border-radius:4px; border:1px solid var(--border);">Gender:
+                  {{ c.patient_gender }}</span>{% endif %}
+                {% if c.condition %}<span
+                  style="background:var(--bg); padding:2px 6px; border-radius:4px; border:1px solid var(--border);">Condition:
+                  {{ c.condition }}</span>{% endif %}
+                {% endif %}
+              </div>
             </div>
             <span class="status-chip accepted" id="chip-{{ loop.index }}">✓ Consented</span>
           </div>

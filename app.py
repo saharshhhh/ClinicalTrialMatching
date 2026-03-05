@@ -208,6 +208,8 @@ def consent():
     name      = data.get("name",      "Anonymous")
     email     = data.get("email",     "unknown@email.com")
     condition = data.get("condition", "")
+    age       = data.get("age", "")
+    gender    = data.get("gender", "")
 
     trial = next((t for t in TRIALS if t["id"] == trial_id), None)
     trial_title = trial["title"] if trial else "Unknown Trial"
@@ -222,6 +224,8 @@ def consent():
         "patient_name":  name,
         "patient_email": email,
         "condition":     condition,
+        "patient_age":   age,
+        "patient_gender":gender,
         "trial_id":      trial_id,
         "trial_title":   trial_title,
         "decision":      decision,
