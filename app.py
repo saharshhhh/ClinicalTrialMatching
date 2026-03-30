@@ -1,11 +1,16 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv  # Added this import
 import csv
 import os
 from datetime import datetime
 
+# Load environment variables from the .env file
+load_dotenv()
+
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
+# It's also a good idea to move your secret key to the .env file eventually!
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
 
 # ── In-memory stores ────────────────────────────────────────────────────────
 CONSENTS = []
@@ -267,7 +272,6 @@ def doctor():
 
     accepted       = [c for c in CONSENTS if c["decision"] == "accepted"]
     enrolled_count = len([c for c in CONSENTS if c.get("enrolled")])
-    # active_trials  = len(set(c["trial_id"] for c in accepted)) if accepted else 0
     
     search_query = ""
     trials_to_show = TRIALS[:50]
@@ -338,21 +342,17 @@ def chat():
             "You are a compassionate clinical trial assistant helping patients understand clinical trials. "
             "Explain everything in simple friendly language. Help patients understand what participation involves, "
             "what consent means, risks and benefits. Be warm, empathetic and never pushy. "
-            # "under the title of the clinical trial provide the specific nct number of the trial"
             "Always recommend consulting their doctor for medical decisions. "
             "Give clear, helpful answers to any question.\n\n"
             "Available trials on this platform:\n" + trial_context
         )
     else:
         preamble = (
-            
             "You are an expert clinical research assistant for doctors and scientists. "
             "Help with trial protocols, patient eligibility, enrollment strategies, "
-            # "under the title of the clinical trial provide the specific nct number of the trial"
             "adverse event reporting, and research data interpretation."
             "Be precise, evidence-based and professional.\n\n"
             "Available trials on this platform:\n" + trial_context
-            
         )
 
     # Build chat history for Cohere format
@@ -374,14 +374,19 @@ def chat():
         "temperature": 0.7,
     }).encode("utf-8")
 
-    api_key = "AZZS1J9Iq8zUPoUrCZTWBuoutwV92Ix4YP4n6IF6"
+    # Fetch the API key dynamically from the environment
+    COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+
+    if not COHERE_API_KEY:
+        print("[CHAT ERROR] COHERE_API_KEY not found in environment variables.")
+        return jsonify({"reply": "AI service is currently unavailable (API key missing)."}), 500
 
     req = urllib.request.Request(
         "https://api.cohere.com/v1/chat",
         data=payload,
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {COHERE_API_KEY}",
             "X-Client-Name": "TrialBridge",
         },
         method="POST",
@@ -401,34 +406,6 @@ def chat():
     except Exception as e:
         print(f"[CHAT ERROR] {type(e).__name__}: {e}")
         return jsonify({"reply": f"AI unavailable: {e}"})
-
-
-# @app.route("/test-groq")
-# def test_groq():
-#     """Visit /test-groq to check if Groq API is reachable."""
-#     import urllib.request, json as j, ssl
-#     api_key = os.environ.get("GROQ_API_KEY", "")
-#     if not api_key:
-#         return jsonify({"status": "error", "message": "GROQ_API_KEY is empty in app.py"})
-#     payload = j.dumps({
-#         "model": "llama-3.3-70b-versatile",
-#         "messages": [{"role": "user", "content": "Say hello in one word."}],
-#         "max_tokens": 10,
-#     }).encode("utf-8")
-#     req = urllib.request.Request(
-#         "https://api.groq.com/openai/v1/chat/completions",
-#         data=payload,
-#         headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}", "User-Agent": "TrialBridge/1.0"},
-#         method="POST",
-#     )
-#     try:
-#         with urllib.request.urlopen(req, context=ssl.create_default_context(), timeout=15) as resp:
-#             result = j.loads(resp.read().decode("utf-8"))
-#             return jsonify({"status": "success", "reply": result["choices"][0]["message"]["content"]})
-#     except Exception as e:
-#         return jsonify({"status": "error", "message": str(e)})
-
-
 
 if __name__ == "__main__":
     # ⚠️ use_reloader=False is CRITICAL
