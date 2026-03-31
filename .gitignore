@@ -1,4 +1,8 @@
 trials.csv
+data/*.json
+cookies.txt
+doctor_cookies.txt
+server.log
 .venv/
 __pycache__/
 *.pyc

@@ -52,24 +52,16 @@
 <body>
 
 <nav>
-  <a href="/" class="nav-back">← Back to Home</a>
+  <a href="/patient" class="nav-back">← Back to Portal</a>
   <div class="nav-brand">Trial<span>Bridge</span></div>
-  <span></span>
+  <a href="/logout" class="nav-back" style="margin-left: 20px;">Logout</a>
 </nav>
 
 <div class="container">
   <h2>My Trial Status</h2>
   <p class="sub">Check the status of your clinical trial applications and enrollment.</p>
 
-  <!-- Lookup Form -->
-  <div class="lookup-box">
-    <h3>🔍 Look up your status</h3>
-    <form method="GET" action="/my-status">
-      <input type="text"  name="name"  placeholder="Your Name"  value="{{ name }}"  required>
-      <input type="email" name="email" placeholder="Your Email" value="{{ email }}" required>
-      <button type="submit" class="btn">Check My Status</button>
-    </form>
-  </div>
+  <!-- Lookup Form removed as we use session now -->
 
   <!-- Results -->
   {% if email %}
