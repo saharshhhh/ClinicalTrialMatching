@@ -1,0 +1,26 @@
+[
+    {
+        "patient_name": "sp",
+        "patient_email": "sa@gmail.com",
+        "condition": "hypertension",
+        "patient_age": "21",
+        "patient_gender": "Male",
+        "trial_id": 155640,
+        "trial_title": "Determining Highest Dose Administration of TC-5214 and Evaluating Effect on the Electrical Activity in the Heart",
+        "decision": "accepted",
+        "timestamp": "2026-03-31 11:07",
+        "enrolled": true
+    },
+    {
+        "patient_name": "Saharsh Pabbathi",
+        "patient_email": "s@mail.com",
+        "condition": "",
+        "patient_age": "",
+        "patient_gender": "",
+        "trial_id": 1,
+        "trial_title": "Kinesiotape for Edema After Bilateral Total Knee Arthroplasty",
+        "decision": "accepted",
+        "timestamp": "2026-03-31 11:09",
+        "enrolled": true
+    }
+]

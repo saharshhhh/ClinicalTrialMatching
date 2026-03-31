@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv  # Added this import
 import csv
 import os
+import json
 from datetime import datetime
 
 # Load environment variables from the .env file
@@ -12,10 +13,30 @@ app = Flask(__name__)
 # It's also a good idea to move your secret key to the .env file eventually!
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
 
-# ── In-memory stores ────────────────────────────────────────────────────────
-CONSENTS = []
-PATIENTS = []
-DOCTORS = []
+# ── Persistent storage ──────────────────────────────────────────────────────
+DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+os.makedirs(DATA_DIR, exist_ok=True)
+
+PATIENTS_FILE = os.path.join(DATA_DIR, 'patients.json')
+DOCTORS_FILE = os.path.join(DATA_DIR, 'doctors.json')
+CONSENTS_FILE = os.path.join(DATA_DIR, 'consents.json')
+
+def load_json(filepath, default_value):
+    if os.path.exists(filepath):
+        with open(filepath, 'r') as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return default_value
+    return default_value
+
+def save_json(filepath, data):
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=4)
+
+CONSENTS = load_json(CONSENTS_FILE, [])
+PATIENTS = load_json(PATIENTS_FILE, [])
+DOCTORS = load_json(DOCTORS_FILE, [])
 
 
 # ── Load trials from CSV ────────────────────────────────────────────────────
@@ -67,6 +88,8 @@ def home():
 
 @app.route("/patient_login", methods=["GET", "POST"])
 def patient_login():
+    if session.get("role") == "patient":
+        return redirect(url_for("patient"))
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
@@ -78,11 +101,14 @@ def patient_login():
             session["condition"] = patient.get("condition", "")
             return redirect(url_for("patient"))
         else:
-            return "Invalid credentials. Please try again.", 401
+            flash("Invalid credentials. Please try again.")
+            return redirect(url_for("patient_login"))
     return render_template("patient_login.html")
 
 @app.route("/patient_signup", methods=["GET", "POST"])
 def patient_signup():
+    if session.get("role") == "patient":
+        return redirect(url_for("patient"))
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip()
@@ -90,7 +116,8 @@ def patient_signup():
         password = request.form.get("password", "")
         
         if any(p["email"] == email for p in PATIENTS):
-            return "Email already exists. Please log in.", 400
+            flash("Email already exists. Please log in.")
+            return redirect(url_for("patient_login"))
             
         PATIENTS.append({
             "name": name, 
@@ -98,6 +125,7 @@ def patient_signup():
             "condition": condition,
             "password": generate_password_hash(password)
         })
+        save_json(PATIENTS_FILE, PATIENTS)
         session["role"] = "patient"
         session["email"] = email
         session["name"] = name
@@ -107,6 +135,8 @@ def patient_signup():
 
 @app.route("/doctor_login", methods=["GET", "POST"])
 def doctor_login():
+    if session.get("role") == "doctor":
+        return redirect(url_for("doctor"))
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
@@ -117,11 +147,14 @@ def doctor_login():
             session["name"] = doctor["name"]
             return redirect(url_for("doctor"))
         else:
-            return "Invalid credentials. Please try again.", 401
+            flash("Invalid credentials. Please try again.")
+            return redirect(url_for("doctor_login"))
     return render_template("doctor_login.html")
 
 @app.route("/doctor_signup", methods=["GET", "POST"])
 def doctor_signup():
+    if session.get("role") == "doctor":
+        return redirect(url_for("doctor"))
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip()
@@ -129,7 +162,8 @@ def doctor_signup():
         password = request.form.get("password", "")
         
         if any(d["email"] == email for d in DOCTORS):
-            return "Email already exists. Please log in.", 400
+            flash("Email already exists. Please log in.")
+            return redirect(url_for("doctor_login"))
             
         DOCTORS.append({
             "name": name, 
@@ -137,6 +171,7 @@ def doctor_signup():
             "organization": organization,
             "password": generate_password_hash(password)
         })
+        save_json(DOCTORS_FILE, DOCTORS)
         session["role"] = "doctor"
         session["email"] = email
         session["name"] = name
@@ -205,8 +240,22 @@ def patient():
         name=name, email=email, condition=condition, age=age, gender=gender, trials=trials_to_show)
 
 
+@app.route("/my-status")
+def my_status():
+    if session.get("role") != "patient":
+        return redirect(url_for("patient_login"))
+    
+    email = session.get("email")
+    name = session.get("name")
+    enrollments = [c for c in CONSENTS if c["patient_email"] == email]
+    
+    return render_template("patient_dashboard.html", name=name, email=email, enrollments=enrollments)
+
+
 @app.route("/consent", methods=["POST"])
 def consent():
+    if session.get("role") != "patient":
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
     data      = request.get_json()
     trial_id  = data.get("trial_id")
     decision  = data.get("decision")
@@ -237,6 +286,7 @@ def consent():
         "timestamp":     datetime.now().strftime("%Y-%m-%d %H:%M"),
         "enrolled":      False,
     })
+    save_json(CONSENTS_FILE, CONSENTS)
 
     print(f"[CONSENT] {name} ({email}) → {decision} → {trial_title}")
     print(f"[CONSENTS] Total={len(CONSENTS)}, Accepted={len([c for c in CONSENTS if c['decision']=='accepted'])}")
@@ -246,6 +296,8 @@ def consent():
 
 @app.route("/enroll", methods=["POST"])
 def enroll():
+    if session.get("role") != "doctor":
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
     data = request.get_json()
     key  = data.get("key")  # format: "email_trialid"
 
@@ -258,6 +310,7 @@ def enroll():
         consent_key = f"{c['patient_email']}_{c['trial_id']}"
         if consent_key == str(key):
             c["enrolled"] = True
+            save_json(CONSENTS_FILE, CONSENTS)
             print(f"[ENROLL] Success: {c['patient_name']} enrolled in {c['trial_title']}")
             return jsonify({"status": "enrolled", "name": c["patient_name"], "trial": c["trial_title"]})
 

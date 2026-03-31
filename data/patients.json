@@ -1,0 +1,8 @@
+[
+    {
+        "name": "Saharsh Pabbathi",
+        "email": "s@mail.com",
+        "condition": "",
+        "password": "scrypt:32768:8:1$CmVggyBGNsKGktDx$8e1c3683c5e5c408fbd304b1ef2ac4fbc425830a7bcca9d7d72206323169f338e7544ad7b20d62cbc620014ce856ab5cbaea26016a335f76cfcfa5b6634234f0"
+    }
+]

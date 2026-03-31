@@ -1,0 +1,8 @@
+[
+    {
+        "name": "hasini",
+        "email": "cvr@medicalorg",
+        "organization": "cvr",
+        "password": "scrypt:32768:8:1$u5f0ZhmJgUBm8htP$dcf9f67be24952a051bd39f879bd0e4d69f409f91b02411bb0d67bd7d7ba77caad16d6bad97796bafa8b50e35bb19f70c772d7b316be98e6066175eddd85ebaa"
+    }
+]

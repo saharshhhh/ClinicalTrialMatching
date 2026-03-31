@@ -1,0 +1,37 @@
+{
+    "patients": [
+        {
+            "name": "Saharsh",
+            "email": "s@mail.com",
+            "condition": "",
+            "password": "scrypt:32768:8:1$OI0Za8H4ZVNm4r8d$43da0e162f4732fd4b838721e6e8b1e0cfa924b11f1554df0af9e2228197cc3694c4e152b38534e3198f7e22c703ff2dee8324bb972d02b2b1f423dca435dd20"
+        },
+        {
+            "name": "sp",
+            "email": "sp@gmail.com",
+            "condition": "",
+            "password": "scrypt:32768:8:1$mxYrM7Io0VuO9WON$2f39501eda0b5bbd4f44645b28911e7531e9f75c3fd841e8c4905bb37bb3c67153b7c3e2d8c5b4f7a3989fcae77da69b1e490531df807a71ae8b1a8e52fbbdda"
+        },
+        {
+            "name": "sp",
+            "email": "sa@gmail.com",
+            "condition": "",
+            "password": "scrypt:32768:8:1$wo7p4ZlnmH2ZqxIL$cbd6f6a26a4f652a616d279b4b450b0e041b580e01675682e76ab3e7e621728f9c880d70a6f48878a884f532f12d331c48c992695c851ecc002f2108df9b410e"
+        }
+    ],
+    "doctors": [],
+    "consents": [
+        {
+            "patient_name": "Saharsh",
+            "patient_email": "s@mail.com",
+            "condition": "Deviated septum",
+            "patient_age": "21",
+            "patient_gender": "Male",
+            "trial_id": 70092,
+            "trial_title": "Nasal Splint and Endoscopic Nasal Septal Repair Surgery",
+            "decision": "accepted",
+            "timestamp": "2026-03-31 10:01",
+            "enrolled": false
+        }
+    ]
+}
