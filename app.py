@@ -69,15 +69,33 @@ TRIALS = ALL_TRIALS  # show all in lists
 ACTIVE_TRIALS = [t for t in ALL_TRIALS if t["status"] in ("RECRUITING", "NOT_YET_RECRUITING")]
 print(f"[STARTUP] Loaded {len(ALL_TRIALS)} total trials, {len(ACTIVE_TRIALS)} active")
 
-print("[STARTUP] Building TF-IDF model for semantic matching...")
-from sklearn.feature_extraction.text import TfidfVectorizer
+print("[STARTUP] Building SentenceTransformer model for semantic matching...")
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-tfidf_vectorizer = TfidfVectorizer(stop_words='english')
-# Compute embeddings for all trials
-tfidf_matrix = tfidf_vectorizer.fit_transform([str(t.get("condition") or "") for t in ALL_TRIALS])
-print("[STARTUP] TF-IDF model built successfully.")
+model = SentenceTransformer('all-MiniLM-L6-v2')  # Fast and good model
+
+# Use a subset of trials for semantic matching to improve performance
+MATCHING_SAMPLE_SIZE = 50000  # Use 50k trials for matching
+matching_trials = ALL_TRIALS[:MATCHING_SAMPLE_SIZE]
+
+trial_texts = [
+    " ".join(filter(None, [
+        str(t.get("title", "")),
+        str(t.get("condition", "")),
+        str(t.get("description", "")),
+    ]))
+    for t in matching_trials
+]
+
+# Encode trials (this will take some time but is necessary for fast search)
+trial_vectors = model.encode(trial_texts, show_progress_bar=True)
+
+def embed_text(text):
+    return model.encode([str(text)], show_progress_bar=False)[0]
+
+print("[STARTUP] SentenceTransformer model built successfully.")
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -218,15 +236,15 @@ def patient():
                 age_group = "ADULT"
 
         if query_text:
-            # Semantic search using TF-IDF cosine similarity
-            query_vec = tfidf_vectorizer.transform([query_text.lower()])
-            sims = cosine_similarity(query_vec, tfidf_matrix).flatten()
+            # Semantic search using SentenceTransformer cosine similarity
+            query_vec = embed_text(query_text)
+            sims = cosine_similarity([query_vec], trial_vectors).flatten()
             
             # Get top matches where similarity is > 0, ordered by best match
             top_indices = np.argsort(sims)[::-1]
             
             for idx in top_indices:
-                trial = ALL_TRIALS[idx]
+                trial = matching_trials[idx]
                 if age_group and trial.get("eligibility") and age_group not in trial.get("eligibility", ""):
                     continue
                 if sims[idx] > 0.01:
@@ -332,14 +350,14 @@ def doctor():
     if request.method == "POST":
         search_query = request.form.get("search_query", "").strip()
         if search_query:
-            query_vec = tfidf_vectorizer.transform([search_query.lower()])
-            sims = cosine_similarity(query_vec, tfidf_matrix).flatten()
+            query_vec = embed_text(search_query)
+            sims = cosine_similarity([query_vec], trial_vectors).flatten()
             top_indices = np.argsort(sims)[::-1]
             
             filtered = []
             for idx in top_indices:
                 if sims[idx] > 0.01:
-                    filtered.append(ALL_TRIALS[idx])
+                    filtered.append(matching_trials[idx])
                 if len(filtered) >= 50:
                     break
             if filtered:
