@@ -1,16 +1,18 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from werkzeug.security import generate_password_hash, check_password_hash
-from dotenv import load_dotenv  # Added this import
+from dotenv import load_dotenv  
 import csv
 import os
 import json
 from datetime import datetime
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 # Load environment variables from the .env file
 load_dotenv()
 
 app = Flask(__name__)
-# It's also a good idea to move your secret key to the .env file eventually!
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
 
 # ── Persistent storage ──────────────────────────────────────────────────────
@@ -38,7 +40,6 @@ CONSENTS = load_json(CONSENTS_FILE, [])
 PATIENTS = load_json(PATIENTS_FILE, [])
 DOCTORS = load_json(DOCTORS_FILE, [])
 
-
 # ── Load trials from CSV ────────────────────────────────────────────────────
 def load_trials():
     trials = []
@@ -64,40 +65,31 @@ def load_trials():
     return trials
 
 ALL_TRIALS = load_trials()
-# Only count recruiting trials as "active" for the dashboard stat
-TRIALS = ALL_TRIALS  # show all in lists
+TRIALS = ALL_TRIALS  
 ACTIVE_TRIALS = [t for t in ALL_TRIALS if t["status"] in ("RECRUITING", "NOT_YET_RECRUITING")]
 print(f"[STARTUP] Loaded {len(ALL_TRIALS)} total trials, {len(ACTIVE_TRIALS)} active")
 
-print("[STARTUP] Building SentenceTransformer model for semantic matching...")
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
-
-model = SentenceTransformer('all-MiniLM-L6-v2')  # Fast and good model
-# Encode trials (this will take some time but is necessary for fast search)
-trial_vectors = model.encode(trial_texts, show_progress_bar=True)
+# ── NLP Startup Logic ───────────────────────────────────────────────────────
+print("[STARTUP] Loading SentenceTransformer model...")
+model = SentenceTransformer('all-MiniLM-L6-v2') 
 
 def embed_text(text):
     return model.encode([str(text)], show_progress_bar=False)[0]
 
-print("[STARTUP] SentenceTransformer model built successfully.")
-
-# Use a subset of trials for semantic matching to improve performance
-MATCHING_SAMPLE_SIZE = 50000  # Use 50k trials for matching
+MATCHING_SAMPLE_SIZE = 50000 
 matching_trials = ALL_TRIALS[:MATCHING_SAMPLE_SIZE]
 
-trial_texts = [
-    " ".join(filter(None, [
-        str(t.get("title", "")),
-        str(t.get("condition", "")),
-        str(t.get("description", "")),
-    ]))
-    for t in matching_trials
-]
-
-
-
+print("[STARTUP] Loading pre-computed trial embeddings...")
+embeddings_path = os.path.join(DATA_DIR, 'trial_embeddings.npy')
+try:
+    # Load the vectors directly from disk in milliseconds
+    trial_vectors = np.load(embeddings_path)
+    print(f"[STARTUP] Successfully loaded {len(trial_vectors)} trial embeddings!")
+except FileNotFoundError:
+    print(f"\n[ERROR] Could not find {embeddings_path}!")
+    print("Please run `python precompute.py` first to generate the embeddings.\n")
+    # Fallback empty array so the app doesn't crash entirely, but search won't work
+    trial_vectors = np.empty((0, 384))
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
@@ -236,7 +228,7 @@ def patient():
             else:
                 age_group = "ADULT"
 
-        if query_text:
+        if query_text and len(trial_vectors) > 0:
             # Semantic search using SentenceTransformer cosine similarity
             query_vec = embed_text(query_text)
             sims = cosine_similarity([query_vec], trial_vectors).flatten()
@@ -292,7 +284,6 @@ def consent():
     CONSENTS = [c for c in CONSENTS
                 if not (c["patient_email"] == email and c["trial_id"] == trial_id)]
 
-    # ✅ Keys match EXACTLY what doctor.html uses in the template
     CONSENTS.append({
         "patient_name":  name,
         "patient_email": email,
@@ -318,14 +309,12 @@ def enroll():
     if session.get("role") != "doctor":
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
     data = request.get_json()
-    key  = data.get("key")  # format: "email_trialid"
+    key  = data.get("key") 
 
     print(f"[ENROLL] Received key: {key}")
     available_keys = [str(c["patient_email"]) + "_" + str(c["trial_id"]) for c in CONSENTS]
-    print(f"[ENROLL] Available keys: {available_keys}")
-
+    
     for c in CONSENTS:
-        # Compare as strings to avoid int/str mismatch
         consent_key = f"{c['patient_email']}_{c['trial_id']}"
         if consent_key == str(key):
             c["enrolled"] = True
@@ -333,7 +322,6 @@ def enroll():
             print(f"[ENROLL] Success: {c['patient_name']} enrolled in {c['trial_title']}")
             return jsonify({"status": "enrolled", "name": c["patient_name"], "trial": c["trial_title"]})
 
-    print(f"[ENROLL] No match found for key: {key}")
     return jsonify({"status": "error", "message": f"Record not found for key: {key}"}), 404
 
 
@@ -350,7 +338,7 @@ def doctor():
     
     if request.method == "POST":
         search_query = request.form.get("search_query", "").strip()
-        if search_query:
+        if search_query and len(trial_vectors) > 0:
             query_vec = embed_text(search_query)
             sims = cosine_similarity([query_vec], trial_vectors).flatten()
             top_indices = np.argsort(sims)[::-1]
@@ -366,12 +354,11 @@ def doctor():
 
     print(f"[DOCTOR PAGE] Showing {len(accepted)} accepted consents. Search query: '{search_query}'")
 
-    # Pass the consents for enrolled count lookup in template
     return render_template("doctor.html",
         trials         = trials_to_show,
         consents       = accepted,
         enrolled_count = enrolled_count,
-        active_trials  = len(ACTIVE_TRIALS),   # ← only recruiting trials
+        active_trials  = len(ACTIVE_TRIALS),
         patient_count  = len(PATIENTS),
         search_query   = search_query,
         all_consents   = CONSENTS,
@@ -427,7 +414,6 @@ def chat():
             "Available trials on this platform:\n" + trial_context
         )
 
-    # Build chat history for Cohere format
     chat_history = []
     for m in messages[:-1]:
         chat_history.append({
@@ -435,7 +421,6 @@ def chat():
             "message": m["content"]
         })
 
-    # Last message is the current user question
     last_message = messages[-1]["content"] if messages else "Hello"
 
     payload = json_lib.dumps({
@@ -446,7 +431,6 @@ def chat():
         "temperature": 0.7,
     }).encode("utf-8")
 
-    # Fetch the API key dynamically from the environment
     COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
     if not COHERE_API_KEY:
@@ -480,8 +464,4 @@ def chat():
         return jsonify({"reply": f"AI unavailable: {e}"})
 
 if __name__ == "__main__":
-    # ⚠️ use_reloader=False is CRITICAL
-    # With reloader=True, Flask starts TWO processes — the second one has
-    # its own empty CONSENTS list, so data written to one process is invisible
-    # to the other. This is why consents appear to disappear!
     app.run(debug=True, use_reloader=False)

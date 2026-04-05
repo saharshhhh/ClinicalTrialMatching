@@ -20,7 +20,31 @@
         "trial_id": 1,
         "trial_title": "Kinesiotape for Edema After Bilateral Total Knee Arthroplasty",
         "decision": "accepted",
-        "timestamp": "2026-03-31 11:09",
-        "enrolled": true
+        "timestamp": "2026-04-05 10:44",
+        "enrolled": false
+    },
+    {
+        "patient_name": "Saharsh Pabbathi",
+        "patient_email": "s@mail.com",
+        "condition": "septum deviation",
+        "patient_age": "45",
+        "patient_gender": "Female",
+        "trial_id": 21846,
+        "trial_title": "Study of the Vascularity of Uterine Septum Using Three Dimensional Power Doppler Ultrasound",
+        "decision": "accepted",
+        "timestamp": "2026-04-05 10:44",
+        "enrolled": false
+    },
+    {
+        "patient_name": "Saharsh Pabbathi",
+        "patient_email": "s@mail.com",
+        "condition": "septum deviation",
+        "patient_age": "45",
+        "patient_gender": "Female",
+        "trial_id": 31869,
+        "trial_title": "Screening of Septo-optic Dysplasia During a Fetal Examination at 16-20 Weeks of Gestation",
+        "decision": "accepted",
+        "timestamp": "2026-04-05 10:44",
+        "enrolled": false
     }
 ]
