@@ -75,6 +75,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
 model = SentenceTransformer('all-MiniLM-L6-v2')  # Fast and good model
+# Encode trials (this will take some time but is necessary for fast search)
+trial_vectors = model.encode(trial_texts, show_progress_bar=True)
+
+def embed_text(text):
+    return model.encode([str(text)], show_progress_bar=False)[0]
+
+print("[STARTUP] SentenceTransformer model built successfully.")
 
 # Use a subset of trials for semantic matching to improve performance
 MATCHING_SAMPLE_SIZE = 50000  # Use 50k trials for matching
@@ -89,13 +96,7 @@ trial_texts = [
     for t in matching_trials
 ]
 
-# Encode trials (this will take some time but is necessary for fast search)
-trial_vectors = model.encode(trial_texts, show_progress_bar=True)
 
-def embed_text(text):
-    return model.encode([str(text)], show_progress_bar=False)[0]
-
-print("[STARTUP] SentenceTransformer model built successfully.")
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
