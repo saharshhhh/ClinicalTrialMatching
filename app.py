@@ -19,26 +19,76 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 os.makedirs(DATA_DIR, exist_ok=True)
 
-PATIENTS_FILE = os.path.join(DATA_DIR, 'patients.json')
-DOCTORS_FILE = os.path.join(DATA_DIR, 'doctors.json')
-CONSENTS_FILE = os.path.join(DATA_DIR, 'consents.json')
+DB_FILE = os.path.join(DATA_DIR, 'database.db')
 
-def load_json(filepath, default_value):
-    if os.path.exists(filepath):
-        with open(filepath, 'r') as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return default_value
-    return default_value
+def get_db_connection():
+    import sqlite3
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-def save_json(filepath, data):
-    with open(filepath, 'w') as f:
-        json.dump(data, f, indent=4)
+def init_db():
+    import sqlite3
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS patients (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    email TEXT UNIQUE,
+                    condition TEXT,
+                    password TEXT
+                 )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS doctors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    email TEXT UNIQUE,
+                    organization TEXT,
+                    password TEXT
+                 )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS consents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    patient_name TEXT,
+                    patient_email TEXT,
+                    condition TEXT,
+                    patient_age TEXT,
+                    patient_gender TEXT,
+                    trial_id TEXT,
+                    trial_title TEXT,
+                    decision TEXT,
+                    timestamp TEXT,
+                    enrolled BOOLEAN
+                 )''')
+    conn.commit()
+    
+    # Migration logic
+    c.execute('SELECT COUNT(*) FROM patients')
+    if c.fetchone()[0] == 0:
+        import json
+        for table, file_name in [('patients', 'patients.json'), ('doctors', 'doctors.json'), ('consents', 'consents.json')]:
+            file_path = os.path.join(DATA_DIR, file_name)
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    try:
+                        data = json.load(f)
+                        for item in data:
+                            if table == 'patients':
+                                c.execute('''INSERT OR IGNORE INTO patients (name, email, condition, password) 
+                                             VALUES (?, ?, ?, ?)''', 
+                                          (item.get('name'), item.get('email'), item.get('condition'), item.get('password')))
+                            elif table == 'doctors':
+                                c.execute('''INSERT OR IGNORE INTO doctors (name, email, organization, password) 
+                                             VALUES (?, ?, ?, ?)''', 
+                                          (item.get('name'), item.get('email'), item.get('organization'), item.get('password')))
+                            elif table == 'consents':
+                                c.execute('''INSERT INTO consents (patient_name, patient_email, condition, patient_age, patient_gender, trial_id, trial_title, decision, timestamp, enrolled)
+                                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                          (item.get('patient_name'), item.get('patient_email'), item.get('condition'), item.get('patient_age'), item.get('patient_gender'), str(item.get('trial_id')), item.get('trial_title'), item.get('decision'), item.get('timestamp'), item.get('enrolled')))
+                    except Exception as e:
+                        print("Migration error:", e)
+        conn.commit()
+    conn.close()
 
-CONSENTS = load_json(CONSENTS_FILE, [])
-PATIENTS = load_json(PATIENTS_FILE, [])
-DOCTORS = load_json(DOCTORS_FILE, [])
+init_db()
 
 # ── Load trials from CSV ────────────────────────────────────────────────────
 def load_trials():
@@ -104,12 +154,14 @@ def patient_login():
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
-        patient = next((p for p in PATIENTS if p["email"] == email), None)
-        if patient and check_password_hash(patient.get("password", ""), password):
+        conn = get_db_connection()
+        patient = conn.execute("SELECT * FROM patients WHERE email = ?", (email,)).fetchone()
+        conn.close()
+        if patient and check_password_hash(patient["password"], password):
             session["role"] = "patient"
             session["email"] = email
             session["name"] = patient["name"]
-            session["condition"] = patient.get("condition", "")
+            session["condition"] = patient["condition"] or ""
             return redirect(url_for("patient"))
         else:
             flash("Invalid credentials. Please try again.")
@@ -126,17 +178,17 @@ def patient_signup():
         condition = request.form.get("condition", "").strip()
         password = request.form.get("password", "")
         
-        if any(p["email"] == email for p in PATIENTS):
+        conn = get_db_connection()
+        existing = conn.execute("SELECT * FROM patients WHERE email = ?", (email,)).fetchone()
+        if existing:
+            conn.close()
             flash("Email already exists. Please log in.")
             return redirect(url_for("patient_login"))
             
-        PATIENTS.append({
-            "name": name, 
-            "email": email, 
-            "condition": condition,
-            "password": generate_password_hash(password)
-        })
-        save_json(PATIENTS_FILE, PATIENTS)
+        conn.execute("INSERT INTO patients (name, email, condition, password) VALUES (?, ?, ?, ?)",
+                     (name, email, condition, generate_password_hash(password)))
+        conn.commit()
+        conn.close()
         session["role"] = "patient"
         session["email"] = email
         session["name"] = name
@@ -151,8 +203,10 @@ def doctor_login():
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
-        doctor = next((d for d in DOCTORS if d["email"] == email), None)
-        if doctor and check_password_hash(doctor.get("password", ""), password):
+        conn = get_db_connection()
+        doctor = conn.execute("SELECT * FROM doctors WHERE email = ?", (email,)).fetchone()
+        conn.close()
+        if doctor and check_password_hash(doctor["password"], password):
             session["role"] = "doctor"
             session["email"] = email
             session["name"] = doctor["name"]
@@ -172,17 +226,17 @@ def doctor_signup():
         organization = request.form.get("organization", "").strip()
         password = request.form.get("password", "")
         
-        if any(d["email"] == email for d in DOCTORS):
+        conn = get_db_connection()
+        existing = conn.execute("SELECT * FROM doctors WHERE email = ?", (email,)).fetchone()
+        if existing:
+            conn.close()
             flash("Email already exists. Please log in.")
             return redirect(url_for("doctor_login"))
             
-        DOCTORS.append({
-            "name": name, 
-            "email": email, 
-            "organization": organization,
-            "password": generate_password_hash(password)
-        })
-        save_json(DOCTORS_FILE, DOCTORS)
+        conn.execute("INSERT INTO doctors (name, email, organization, password) VALUES (?, ?, ?, ?)",
+                     (name, email, organization, generate_password_hash(password)))
+        conn.commit()
+        conn.close()
         session["role"] = "doctor"
         session["email"] = email
         session["name"] = name
@@ -258,7 +312,10 @@ def my_status():
     
     email = session.get("email")
     name = session.get("name")
-    enrollments = [c for c in CONSENTS if c["patient_email"] == email]
+    
+    conn = get_db_connection()
+    enrollments = [dict(row) for row in conn.execute("SELECT * FROM consents WHERE patient_email = ?", (email,)).fetchall()]
+    conn.close()
     
     return render_template("patient_dashboard.html", name=name, email=email, enrollments=enrollments)
 
@@ -279,27 +336,21 @@ def consent():
     trial = next((t for t in TRIALS if t["id"] == trial_id), None)
     trial_title = trial["title"] if trial else "Unknown Trial"
 
-    # Remove duplicate
-    global CONSENTS
-    CONSENTS = [c for c in CONSENTS
-                if not (c["patient_email"] == email and c["trial_id"] == trial_id)]
+    conn = get_db_connection()
+    conn.execute("DELETE FROM consents WHERE patient_email = ? AND trial_id = ?", (email, str(trial_id)))
+    
+    conn.execute("""
+        INSERT INTO consents (patient_name, patient_email, condition, patient_age, patient_gender, trial_id, trial_title, decision, timestamp, enrolled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (name, email, condition, age, gender, str(trial_id), trial_title, decision, datetime.now().strftime("%Y-%m-%d %H:%M"), False))
+    conn.commit()
 
-    CONSENTS.append({
-        "patient_name":  name,
-        "patient_email": email,
-        "condition":     condition,
-        "patient_age":   age,
-        "patient_gender":gender,
-        "trial_id":      trial_id,
-        "trial_title":   trial_title,
-        "decision":      decision,
-        "timestamp":     datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "enrolled":      False,
-    })
-    save_json(CONSENTS_FILE, CONSENTS)
+    c_total = conn.execute("SELECT COUNT(*) FROM consents").fetchone()[0]
+    c_accepted = conn.execute("SELECT COUNT(*) FROM consents WHERE decision = 'accepted'").fetchone()[0]
+    conn.close()
 
     print(f"[CONSENT] {name} ({email}) → {decision} → {trial_title}")
-    print(f"[CONSENTS] Total={len(CONSENTS)}, Accepted={len([c for c in CONSENTS if c['decision']=='accepted'])}")
+    print(f"[CONSENTS] Total={c_total}, Accepted={c_accepted}")
 
     return jsonify({"status": "success", "decision": decision})
 
@@ -312,15 +363,22 @@ def enroll():
     key  = data.get("key") 
 
     print(f"[ENROLL] Received key: {key}")
-    available_keys = [str(c["patient_email"]) + "_" + str(c["trial_id"]) for c in CONSENTS]
     
-    for c in CONSENTS:
-        consent_key = f"{c['patient_email']}_{c['trial_id']}"
-        if consent_key == str(key):
-            c["enrolled"] = True
-            save_json(CONSENTS_FILE, CONSENTS)
-            print(f"[ENROLL] Success: {c['patient_name']} enrolled in {c['trial_title']}")
-            return jsonify({"status": "enrolled", "name": c["patient_name"], "trial": c["trial_title"]})
+    conn = get_db_connection()
+    try:
+        if "_" in str(key):
+            patient_email, trial_id = str(key).rsplit("_", 1)
+            c = conn.execute("SELECT * FROM consents WHERE patient_email = ? AND trial_id = ?", (patient_email, trial_id)).fetchone()
+            if c:
+                conn.execute("UPDATE consents SET enrolled = 1 WHERE id = ?", (c['id'],))
+                conn.commit()
+                conn.close()
+                print(f"[ENROLL] Success: {c['patient_name']} enrolled in {c['trial_title']}")
+                return jsonify({"status": "enrolled", "name": c["patient_name"], "trial": c["trial_title"]})
+    except Exception as e:
+        print("Enrollment error", e)
+        
+    conn.close()
 
     return jsonify({"status": "error", "message": f"Record not found for key: {key}"}), 404
 
@@ -330,8 +388,13 @@ def doctor():
     if session.get("role") != "doctor":
         return redirect(url_for("doctor_login"))
 
-    accepted       = [c for c in CONSENTS if c["decision"] == "accepted"]
-    enrolled_count = len([c for c in CONSENTS if c.get("enrolled")])
+    conn = get_db_connection()
+    all_consents = [dict(row) for row in conn.execute("SELECT * FROM consents").fetchall()]
+    patient_count = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
+    conn.close()
+    
+    accepted       = [c for c in all_consents if c["decision"] == "accepted"]
+    enrolled_count = len([c for c in all_consents if c.get("enrolled")])
     
     search_query = ""
     trials_to_show = TRIALS[:50]
@@ -359,20 +422,25 @@ def doctor():
         consents       = accepted,
         enrolled_count = enrolled_count,
         active_trials  = len(ACTIVE_TRIALS),
-        patient_count  = len(PATIENTS),
+        patient_count  = patient_count,
         search_query   = search_query,
-        all_consents   = CONSENTS,
+        all_consents   = all_consents,
     )
 
 
 @app.route("/debug")
 def debug():
-    accepted = [c for c in CONSENTS if c["decision"] == "accepted"]
+    conn = get_db_connection()
+    all_consents = [dict(row) for row in conn.execute("SELECT * FROM consents").fetchall()]
+    accepted = [c for c in all_consents if c["decision"] == "accepted"]
+    patient_count = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
+    conn.close()
+    
     return jsonify({
-        "total_consents":    len(CONSENTS),
+        "total_consents":    len(all_consents),
         "accepted_consents": len(accepted),
-        "total_patients":    len(PATIENTS),
-        "consents":          CONSENTS,
+        "total_patients":    patient_count,
+        "consents":          all_consents,
     })
 
 
