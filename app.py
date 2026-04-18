@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 import csv
 import os
 import json
+import urllib.request
+import urllib.error
+import ssl
+import markdown
 from datetime import datetime
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -36,6 +40,7 @@ def init_db():
                     name TEXT,
                     email TEXT UNIQUE,
                     condition TEXT,
+                    organization TEXT,
                     password TEXT
                  )''')
     c.execute('''CREATE TABLE IF NOT EXISTS doctors (
@@ -58,6 +63,13 @@ def init_db():
                     timestamp TEXT,
                     enrolled BOOLEAN
                  )''')
+
+    # Check if organization column exists in patients table
+    c.execute("PRAGMA table_info(patients)")
+    columns = [column[1] for column in c.fetchall()]
+    if 'organization' not in columns:
+        c.execute('ALTER TABLE patients ADD COLUMN organization TEXT')
+
     conn.commit()
     
     # Migration logic
@@ -72,9 +84,9 @@ def init_db():
                         data = json.load(f)
                         for item in data:
                             if table == 'patients':
-                                c.execute('''INSERT OR IGNORE INTO patients (name, email, condition, password) 
-                                             VALUES (?, ?, ?, ?)''', 
-                                          (item.get('name'), item.get('email'), item.get('condition'), item.get('password')))
+                                c.execute('''INSERT OR IGNORE INTO patients (name, email, condition, organization, password)
+                                             VALUES (?, ?, ?, ?, ?)''',
+                                          (item.get('name'), item.get('email'), item.get('condition'), item.get('organization'), item.get('password')))
                             elif table == 'doctors':
                                 c.execute('''INSERT OR IGNORE INTO doctors (name, email, organization, password) 
                                              VALUES (?, ?, ?, ?)''', 
@@ -162,6 +174,7 @@ def patient_login():
             session["email"] = email
             session["name"] = patient["name"]
             session["condition"] = patient["condition"] or ""
+            session["organization"] = patient["organization"] or ""
             return redirect(url_for("patient"))
         else:
             flash("Invalid credentials. Please try again.")
@@ -176,6 +189,7 @@ def patient_signup():
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip()
         condition = request.form.get("condition", "").strip()
+        organization = request.form.get("organization", "").strip()
         password = request.form.get("password", "")
         
         conn = get_db_connection()
@@ -185,14 +199,15 @@ def patient_signup():
             flash("Email already exists. Please log in.")
             return redirect(url_for("patient_login"))
             
-        conn.execute("INSERT INTO patients (name, email, condition, password) VALUES (?, ?, ?, ?)",
-                     (name, email, condition, generate_password_hash(password)))
+        conn.execute("INSERT INTO patients (name, email, condition, organization, password) VALUES (?, ?, ?, ?, ?)",
+                     (name, email, condition, organization, generate_password_hash(password)))
         conn.commit()
         conn.close()
         session["role"] = "patient"
         session["email"] = email
         session["name"] = name
         session["condition"] = condition
+        session["organization"] = organization
         return redirect(url_for("patient"))
     return render_template("patient_signup.html")
 
@@ -210,6 +225,7 @@ def doctor_login():
             session["role"] = "doctor"
             session["email"] = email
             session["name"] = doctor["name"]
+            session["organization"] = doctor["organization"]
             return redirect(url_for("doctor"))
         else:
             flash("Invalid credentials. Please try again.")
@@ -240,6 +256,7 @@ def doctor_signup():
         session["role"] = "doctor"
         session["email"] = email
         session["name"] = name
+        session["organization"] = organization
         return redirect(url_for("doctor"))
     return render_template("doctor_signup.html")
 
@@ -388,8 +405,15 @@ def doctor():
     if session.get("role") != "doctor":
         return redirect(url_for("doctor_login"))
 
+    organization = session.get("organization")
     conn = get_db_connection()
     all_consents = [dict(row) for row in conn.execute("SELECT * FROM consents").fetchall()]
+
+    # Fetch patients in the same organization
+    org_patients = []
+    if organization:
+        org_patients = [dict(row) for row in conn.execute("SELECT * FROM patients WHERE organization = ?", (organization,)).fetchall()]
+
     patient_count = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
     conn.close()
     
@@ -425,7 +449,95 @@ def doctor():
         patient_count  = patient_count,
         search_query   = search_query,
         all_consents   = all_consents,
+        org_patients   = org_patients,
+        organization   = organization
     )
+
+
+@app.route("/request_consent", methods=["POST"])
+def request_consent():
+    if session.get("role") != "doctor":
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    data = request.get_json()
+    patient_email = data.get("patient_email")
+    trial_id = int(data.get("trial_id"))
+    doctor_name = session.get("name")
+    doctor_email = session.get("email")
+    doctor_org = session.get("organization")
+
+    # Security check: verify patient belongs to doctor's organization
+    conn = get_db_connection()
+    patient = conn.execute("SELECT * FROM patients WHERE email = ? AND organization = ?", (patient_email, doctor_org)).fetchone()
+    conn.close()
+
+    if not patient:
+        return jsonify({"status": "error", "message": "Patient not found in your organization"}), 403
+
+    trial = next((t for t in TRIALS if t["id"] == trial_id), None)
+    if not trial:
+        return jsonify({"status": "error", "message": "Trial not found"}), 404
+
+    # Summarize trial description using Cohere
+    summary = "No summary available."
+    COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+
+    if COHERE_API_KEY:
+        prompt = f"Please provide a concise, patient-friendly summary of the following clinical trial description in 2-3 sentences:\n\n{trial['description']}"
+        payload = json.dumps({
+            "model": "command-r7b-12-2024",
+            "message": prompt,
+            "temperature": 0.3,
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            "https://api.cohere.com/v1/chat",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {COHERE_API_KEY}",
+            },
+            method="POST",
+        )
+
+        try:
+            ctx = ssl.create_default_context()
+            with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                summary = result["text"]
+        except Exception as e:
+            print(f"[SUMMARIZATION ERROR] {e}")
+            summary = trial["description"][:200] + "..."
+
+    # Simulate sending email
+    email_content = f"""
+    To: {patient_email}
+    From: {doctor_email} ({doctor_name})
+    Subject: Consent Request for Clinical Trial: {trial['title']}
+
+    Dear Patient,
+
+    Dr. {doctor_name} has requested your consent to participate in the following clinical trial:
+    Title: {trial['title']}
+
+    Trial Summary:
+    {summary}
+
+    Please log in to the TrialBridge portal to review the full details and provide your decision.
+
+    Best regards,
+    TrialBridge Team
+    """
+
+    # Log the "email"
+    with open("server.log", "a") as f:
+        f.write(f"\n--- EMAIL SENT AT {datetime.now()} ---\n")
+        f.write(email_content)
+        f.write("\n-----------------------------------\n")
+
+    print(f"[REQUEST CONSENT] Email simulated for {patient_email} regarding trial {trial_id}")
+
+    return jsonify({"status": "success", "summary": summary})
 
 
 @app.route("/debug")
@@ -446,12 +558,6 @@ def debug():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    import json as json_lib
-    import markdown
-    import urllib.request
-    import urllib.error
-    import ssl
-
     data     = request.get_json()
     messages = data.get("messages", [])
     role     = data.get("role", "patient")
@@ -491,7 +597,7 @@ def chat():
 
     last_message = messages[-1]["content"] if messages else "Hello"
 
-    payload = json_lib.dumps({
+    payload = json.dumps({
         "model": "command-r7b-12-2024",
         "message": last_message,
         "chat_history": chat_history,
@@ -519,7 +625,7 @@ def chat():
     try:
         ctx = ssl.create_default_context()
         with urllib.request.urlopen(req, context=ctx, timeout=60) as resp:
-            result = json_lib.loads(resp.read().decode("utf-8"))
+            result = json.loads(resp.read().decode("utf-8"))
             reply = result["text"]
             html_reply = markdown.markdown(reply)
             return jsonify({"reply": html_reply})
