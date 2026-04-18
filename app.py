@@ -8,6 +8,9 @@ import urllib.request
 import urllib.error
 import ssl
 import markdown
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -18,6 +21,35 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
+
+def send_actual_email(to_email, subject, body):
+    """Sends an actual email using SMTP settings from environment variables."""
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = os.getenv("SMTP_PORT", "587")
+    smtp_user = os.getenv("SMTP_USERNAME")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+
+    if not all([smtp_server, smtp_user, smtp_pass]):
+        print("[EMAIL] Skipping real email sending: SMTP credentials missing in environment.")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp_server, int(smtp_port))
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
+        print(f"[EMAIL] Successfully sent email to {to_email}")
+        return True
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send email to {to_email}: {e}")
+        return False
 
 # ── Persistent storage ──────────────────────────────────────────────────────
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
@@ -531,13 +563,17 @@ def request_consent():
 
     # Log the "email"
     with open("server.log", "a") as f:
-        f.write(f"\n--- EMAIL SENT AT {datetime.now()} ---\n")
+        f.write(f"\n--- EMAIL REQUEST AT {datetime.now()} ---\n")
         f.write(email_content)
         f.write("\n-----------------------------------\n")
 
-    print(f"[REQUEST CONSENT] Email simulated for {patient_email} regarding trial {trial_id}")
+    # Send actual email
+    subject = f"Consent Request for Clinical Trial: {trial['title']}"
+    sent = send_actual_email(patient_email, subject, email_content)
 
-    return jsonify({"status": "success", "summary": summary})
+    print(f"[REQUEST CONSENT] Email workflow completed for {patient_email} regarding trial {trial_id}. Actual sent: {sent}")
+
+    return jsonify({"status": "success", "summary": summary, "email_sent": sent})
 
 
 @app.route("/debug")
