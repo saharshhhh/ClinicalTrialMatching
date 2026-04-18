@@ -634,6 +634,7 @@
       <!-- Tabs -->
       <div class="tabs">
         <button class="tab active" onclick="switchTab('consents', this)">🧑‍⚕️ Consented Patients</button>
+        <button class="tab" onclick="switchTab('org-patients', this)">🏢 Organization Patients</button>
         <button class="tab" onclick="switchTab('trials', this)">🔬 All Trials</button>
       </div>
 
@@ -678,6 +679,39 @@
           <div class="empty-icon">📋</div>
           <p>No patients have consented yet.<br>
             Share the patient portal link so patients can review and consent to trials.</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Organization Patients Tab -->
+      <div class="tab-content" id="tab-org-patients">
+        <div style="margin-bottom: 20px; padding: 12px; background: var(--teal-light); border-radius: 10px; color: var(--teal-dark); font-size: 14px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="font-size:18px;">corporate_fare</span>
+          Viewing patients from: <strong>{{ organization }}</strong>
+        </div>
+
+        {% if org_patients %}
+        {% for p in org_patients %}
+        <div class="consent-card">
+          <div class="consent-card-header">
+            <div>
+              <div class="patient-name">{{ p.name }}</div>
+              <div class="patient-email">{{ p.email }}</div>
+              <div class="patient-details" style="font-size: 12px; color: var(--slate); margin-top: 4px;">
+                {% if p.condition %}Condition: <strong>{{ p.condition }}</strong>{% endif %}
+              </div>
+            </div>
+            <button class="btn-enroll" onclick="openRequestConsent('{{ p.email }}', '{{ p.name }}')">
+              Ask for Consent
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+          <div class="empty-icon">👥</div>
+          <p>No other patients found in your organization ({{ organization }}).<br>
+            Invite patients to sign up with your organization name.</p>
         </div>
         {% endif %}
       </div>
@@ -756,9 +790,32 @@
     </div>
   </div>
 
+  <!-- Request Consent Modal -->
+  <div id="consentModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:white; padding:30px; border-radius:16px; width:100%; max-width:500px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
+      <h3 style="font-family:'Playfair Display', serif; font-size:20px; margin-bottom:10px;">Request Consent</h3>
+      <p id="modalPatientInfo" style="font-size:14px; color:var(--muted); margin-bottom:20px;"></p>
+
+      <div style="margin-bottom:20px;">
+        <label style="display:block; font-size:13px; font-weight:500; margin-bottom:8px;">Select Clinical Trial</label>
+        <select id="modalTrialSelect" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-size:14px;">
+          {% for trial in trials %}
+          <option value="{{ trial.id }}">{{ trial.title[:60] }}...</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="display:flex; gap:12px; justify-content:flex-end;">
+        <button onclick="closeRequestConsent()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border); background:white; cursor:pointer; font-size:14px;">Cancel</button>
+        <button id="btnSendRequest" onclick="sendConsentRequest()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--teal); color:white; cursor:pointer; font-size:14px; font-weight:500;">Send Request</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let chatHistory = [];
     let enrolledCount = 0;
+    let currentPatientEmail = '';
 
     function now() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
@@ -767,6 +824,46 @@
       document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById('tab-' + tab).classList.add('active');
+    }
+
+    function openRequestConsent(email, name) {
+      currentPatientEmail = email;
+      document.getElementById('modalPatientInfo').textContent = `Request consent from ${name} (${email})`;
+      document.getElementById('consentModal').style.display = 'flex';
+    }
+
+    function closeRequestConsent() {
+      document.getElementById('consentModal').style.display = 'none';
+    }
+
+    async function sendConsentRequest() {
+      const trialId = document.getElementById('modalTrialSelect').value;
+      const btn = document.getElementById('btnSendRequest');
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+
+      try {
+        const res = await fetch('/request_consent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_email: currentPatientEmail,
+            trial_id: trialId
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          alert('Consent request sent successfully!');
+          closeRequestConsent();
+        } else {
+          alert('Error: ' + data.message);
+        }
+      } catch (e) {
+        alert('Failed to send request.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Request';
+      }
     }
 
     function appendMessage(role, text) {
