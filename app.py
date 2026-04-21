@@ -12,6 +12,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from functools import lru_cache
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
@@ -174,6 +175,54 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 def embed_text(text):
     return model.encode([str(text)], show_progress_bar=False)[0]
 
+@lru_cache(maxsize=128)
+def fetch_trial_from_api(title):
+    """Fetches detailed trial information from clinicaltrials.gov API V2 using the title."""
+    import urllib.parse
+    base_url = "https://clinicaltrials.gov/api/v2/studies"
+    params = {
+        "query.term": title,
+        "pageSize": 1
+    }
+    url = f"{base_url}?{urllib.parse.urlencode(params)}"
+
+    try:
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        req = urllib.request.Request(url, headers=headers)
+        ctx = ssl.create_default_context()
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("studies"):
+                study = data["studies"][0]
+                protocol = study.get("protocolSection", {})
+
+                # Extract relevant modules for RAG
+                description_module = protocol.get("descriptionModule", {})
+                conditions_module = protocol.get("conditionsModule", {})
+                design_module = protocol.get("designModule", {})
+                arms_interventions_module = protocol.get("armsInterventionsModule", {})
+                eligibility_module = protocol.get("eligibilityModule", {})
+
+                api_data = {
+                    "detailed_description": description_module.get("detailedDescription", ""),
+                    "brief_summary": description_module.get("briefSummary", ""),
+                    "conditions": ", ".join(conditions_module.get("conditions", [])),
+                    "study_type": design_module.get("studyType", ""),
+                    "phases": ", ".join(design_module.get("phases", [])),
+                    "eligibility_criteria": eligibility_module.get("eligibilityCriteria", ""),
+                    "interventions": [
+                        f"{i.get('type')}: {i.get('name')} ({i.get('description', '')})"
+                        for i in arms_interventions_module.get("interventions", [])
+                    ]
+                }
+                return api_data
+    except Exception as e:
+        print(f"[API ERROR] Failed to fetch from clinicaltrials.gov: {e}")
+    return None
+
 MATCHING_SAMPLE_SIZE = 50000 
 matching_trials = ALL_TRIALS[:MATCHING_SAMPLE_SIZE]
 
@@ -202,9 +251,12 @@ def trial_detail(trial_id):
         flash("Trial not found.")
         return redirect(url_for("home"))
 
+    # Fetch additional data from clinicaltrials.gov API immediately on page load
+    api_data = fetch_trial_from_api(trial['title'])
+
     # Pass user role to template for conditional UI if needed
     role = session.get("role")
-    return render_template("trial_detail.html", trial=trial, role=role)
+    return render_template("trial_detail.html", trial=trial, role=role, api_data=api_data)
 
 @app.route("/patient_login", methods=["GET", "POST"])
 def patient_login():
@@ -621,6 +673,7 @@ def chat():
     if trial_id:
         trial = next((t for t in ALL_TRIALS if t["id"] == trial_id), None)
         if trial:
+            # Data from local CSV
             trial_info = f"""
             Title: {trial['title']}
             Full Title: {trial.get('full_title')}
@@ -635,10 +688,25 @@ def chat():
             Outcome Measures: {trial.get('outcome_measure')}
             Location: {trial['location']}
             """
+
+            # Fetch additional data from clinicaltrials.gov API
+            api_data = fetch_trial_from_api(trial['title'])
+            if api_data:
+                trial_info += f"""
+                --- Additional Details from ClinicalTrials.gov ---
+                Detailed Description: {api_data['detailed_description']}
+                Brief Summary: {api_data['brief_summary']}
+                Conditions: {api_data['conditions']}
+                Study Type: {api_data['study_type']}
+                Phases: {api_data['phases']}
+                Eligibility Criteria: {api_data['eligibility_criteria']}
+                Interventions from API: {'; '.join(api_data['interventions'])}
+                """
+
             preamble = (
                 f"You are a dedicated assistant for the clinical trial: '{trial['title']}'. "
-                "Base your responses ONLY on the following trial data. If a question is not related to this trial "
-                "or cannot be answered by this data, politely inform the user that you can only discuss this specific trial.\n\n"
+                "Base your responses ONLY on the following trial data (including detailed protocol info from clinicaltrials.gov). "
+                "If a question is not related to this trial or cannot be answered by this data, politely inform the user that you can only discuss this specific trial.\n\n"
                 f"TRIAL DATA:\n{trial_info}"
             )
 
