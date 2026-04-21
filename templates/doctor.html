@@ -664,6 +664,9 @@
             </div>
             <span class="status-chip accepted" id="chip-{{ loop.index }}">✓ Consented</span>
           </div>
+          <div style="margin-bottom: 10px;">
+            <a href="/consent_detail/{{ c.id }}" style="font-size: 13px; color: var(--teal); text-decoration: none; font-weight: 500;">View Details & Research Context →</a>
+          </div>
           <div class="consent-meta">
             Trial: <strong>{{ c.trial_title }}</strong><br>
             Submitted: {{ c.timestamp }}
@@ -702,7 +705,7 @@
               </div>
             </div>
             <button class="btn-enroll" onclick="openRequestConsent('{{ p.email }}', '{{ p.name }}')">
-              Ask for Consent
+              Agree Consent
             </button>
           </div>
         </div>

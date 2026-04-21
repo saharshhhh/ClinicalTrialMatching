@@ -244,6 +244,31 @@ except FileNotFoundError:
 def home():
     return render_template("landing.html")
 
+@app.route("/consent_detail/<int:consent_id>")
+def consent_detail(consent_id):
+    if session.get("role") != "doctor":
+        return redirect(url_for("doctor_login"))
+
+    conn = get_db_connection()
+    consent = conn.execute("SELECT * FROM consents WHERE id = ?", (consent_id,)).fetchone()
+    conn.close()
+
+    if not consent:
+        flash("Consent record not found.")
+        return redirect(url_for("doctor"))
+
+    trial_id = int(consent["trial_id"])
+    trial = next((t for t in ALL_TRIALS if t["id"] == trial_id), None)
+
+    if not trial:
+        flash("Trial not found.")
+        return redirect(url_for("doctor"))
+
+    # Fetch additional data from clinicaltrials.gov API
+    api_data = fetch_trial_from_api(trial['title'])
+
+    return render_template("consent_detail.html", consent=consent, trial=trial, api_data=api_data)
+
 @app.route("/trial/<int:trial_id>")
 def trial_detail(trial_id):
     trial = next((t for t in ALL_TRIALS if t["id"] == trial_id), None)
@@ -506,7 +531,16 @@ def doctor():
 
     organization = session.get("organization")
     conn = get_db_connection()
-    all_consents = [dict(row) for row in conn.execute("SELECT * FROM consents").fetchall()]
+
+    # Restrict to organization's patients
+    if organization:
+        all_consents = [dict(row) for row in conn.execute("""
+            SELECT c.* FROM consents c
+            JOIN patients p ON c.patient_email = p.email
+            WHERE p.organization = ?
+        """, (organization,)).fetchall()]
+    else:
+        all_consents = []
 
     # Fetch patients in the same organization
     org_patients = []
