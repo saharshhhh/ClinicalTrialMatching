@@ -145,21 +145,25 @@ def load_trials():
         reader = csv.DictReader(f)
         for i, row in enumerate(reader):
             trials.append({
-                "id":           i + 1,
-                "title":        row.get("Brief Title") or "No Title Available",
-                "condition":    row.get("Conditions") or "",
-                "description":  row.get("Intervention Description") or "",
-                "eligibility":  row.get("Standard Age") or "",
-                "phase":        row.get("Phases") or "",
-                "status":       row.get("Overall Status") or "",
-                "location":     row.get("Organization Full Name") or "",
-                "duration":     row.get("Start Date") or "N/A",
-                "compensation": "Contact sponsor",
+                "id":              i + 1,
+                "title":           row.get("Brief Title") or "No Title Available",
+                "full_title":      row.get("Full Title") or "",
+                "condition":       row.get("Conditions") or "",
+                "description":     row.get("Intervention Description") or "",
+                "interventions":   row.get("Interventions") or "",
+                "eligibility":     row.get("Standard Age") or "",
+                "phase":           row.get("Phases") or "",
+                "status":          row.get("Overall Status") or "",
+                "location":        row.get("Organization Full Name") or "",
+                "duration":        row.get("Start Date") or "N/A",
+                "compensation":    "Contact sponsor",
+                "outcome_measure": row.get("Outcome Measure") or "",
+                "study_type":      row.get("Study Type") or "",
+                "primary_purpose": row.get("Primary Purpose") or "",
             })
     return trials
 
 ALL_TRIALS = load_trials()
-TRIALS = ALL_TRIALS  
 ACTIVE_TRIALS = [t for t in ALL_TRIALS if t["status"] in ("RECRUITING", "NOT_YET_RECRUITING")]
 print(f"[STARTUP] Loaded {len(ALL_TRIALS)} total trials, {len(ACTIVE_TRIALS)} active")
 
@@ -190,6 +194,17 @@ except FileNotFoundError:
 @app.route("/")
 def home():
     return render_template("landing.html")
+
+@app.route("/trial/<int:trial_id>")
+def trial_detail(trial_id):
+    trial = next((t for t in ALL_TRIALS if t["id"] == trial_id), None)
+    if not trial:
+        flash("Trial not found.")
+        return redirect(url_for("home"))
+
+    # Pass user role to template for conditional UI if needed
+    role = session.get("role")
+    return render_template("trial_detail.html", trial=trial, role=role)
 
 @app.route("/patient_login", methods=["GET", "POST"])
 def patient_login():
@@ -348,7 +363,7 @@ def patient():
                 if len(filtered) >= 15:
                     break
     
-    trials_to_show = filtered if filtered else TRIALS[:15]
+    trials_to_show = filtered if filtered else ALL_TRIALS[:15]
 
     return render_template("patient.html",
         name=name, email=email, condition=condition, age=age, gender=gender, trials=trials_to_show)
@@ -382,7 +397,7 @@ def consent():
     age       = data.get("age", "")
     gender    = data.get("gender", "")
 
-    trial = next((t for t in TRIALS if t["id"] == trial_id), None)
+    trial = next((t for t in ALL_TRIALS if t["id"] == trial_id), None)
     trial_title = trial["title"] if trial else "Unknown Trial"
 
     conn = get_db_connection()
@@ -453,7 +468,7 @@ def doctor():
     enrolled_count = len([c for c in all_consents if c.get("enrolled")])
     
     search_query = ""
-    trials_to_show = TRIALS[:50]
+    trials_to_show = ALL_TRIALS[:50]
     
     if request.method == "POST":
         search_query = request.form.get("search_query", "").strip()
@@ -506,7 +521,7 @@ def request_consent():
     if not patient:
         return jsonify({"status": "error", "message": "Patient not found in your organization"}), 403
 
-    trial = next((t for t in TRIALS if t["id"] == trial_id), None)
+    trial = next((t for t in ALL_TRIALS if t["id"] == trial_id), None)
     if not trial:
         return jsonify({"status": "error", "message": "Trial not found"}), 404
 
@@ -597,32 +612,63 @@ def chat():
     data     = request.get_json()
     messages = data.get("messages", [])
     role     = data.get("role", "patient")
+    trial_id = data.get("trial_id")
+    action   = data.get("action")
 
     if not messages:
         messages = [{"role": "user", "content": "Hello"}]
 
-    trial_context = "\n".join([
-        f"- {t['title']} | Condition: {t['condition']} | Phase: {t['phase']} | Location: {t['location']}"
-        for t in TRIALS[:5]
-    ])
+    if trial_id:
+        trial = next((t for t in ALL_TRIALS if t["id"] == trial_id), None)
+        if trial:
+            trial_info = f"""
+            Title: {trial['title']}
+            Full Title: {trial.get('full_title')}
+            Status: {trial['status']}
+            Phase: {trial['phase']}
+            Condition: {trial['condition']}
+            Study Type: {trial.get('study_type')}
+            Primary Purpose: {trial.get('primary_purpose')}
+            Description: {trial['description']}
+            Interventions: {trial.get('interventions')}
+            Eligibility: {trial['eligibility']}
+            Outcome Measures: {trial.get('outcome_measure')}
+            Location: {trial['location']}
+            """
+            preamble = (
+                f"You are a dedicated assistant for the clinical trial: '{trial['title']}'. "
+                "Base your responses ONLY on the following trial data. If a question is not related to this trial "
+                "or cannot be answered by this data, politely inform the user that you can only discuss this specific trial.\n\n"
+                f"TRIAL DATA:\n{trial_info}"
+            )
 
-    if role == "patient":
-        preamble = (
-            "You are a compassionate clinical trial assistant helping patients understand clinical trials. "
-            "Explain everything in simple friendly language. Help patients understand what participation involves, "
-            "what consent means, risks and benefits. Be warm, empathetic and never pushy. "
-            "Always recommend consulting their doctor for medical decisions. "
-            "Give clear, helpful answers to any question.\n\n"
-            "Available trials on this platform:\n" + trial_context
-        )
+            if action == "summarize":
+                messages = [{"role": "user", "content": "Please provide a concise, clear, and patient-friendly summary of this clinical trial based on the provided data."}]
+        else:
+            return jsonify({"reply": "Trial not found."}), 404
     else:
-        preamble = (
-            "You are an expert clinical research assistant for doctors and scientists. "
-            "Help with trial protocols, patient eligibility, enrollment strategies, "
-            "adverse event reporting, and research data interpretation."
-            "Be precise, evidence-based and professional.\n\n"
-            "Available trials on this platform:\n" + trial_context
-        )
+        trial_context = "\n".join([
+            f"- {t['title']} | Condition: {t['condition']} | Phase: {t['phase']} | Location: {t['location']}"
+            for t in ALL_TRIALS[:5]
+        ])
+
+        if role == "patient":
+            preamble = (
+                "You are a compassionate clinical trial assistant helping patients understand clinical trials. "
+                "Explain everything in simple friendly language. Help patients understand what participation involves, "
+                "what consent means, risks and benefits. Be warm, empathetic and never pushy. "
+                "Always recommend consulting their doctor for medical decisions. "
+                "Give clear, helpful answers to any question.\n\n"
+                "Available trials on this platform:\n" + trial_context
+            )
+        else:
+            preamble = (
+                "You are an expert clinical research assistant for doctors and scientists. "
+                "Help with trial protocols, patient eligibility, enrollment strategies, "
+                "adverse event reporting, and research data interpretation."
+                "Be precise, evidence-based and professional.\n\n"
+                "Available trials on this platform:\n" + trial_context
+            )
 
     chat_history = []
     for m in messages[:-1]:
