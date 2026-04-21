@@ -182,7 +182,10 @@
       {% if trials %}
       {% for trial in trials %}
       <div class="trial-card" id="card-{{ trial.id }}">
-        <div class="trial-title">{{ trial.title }}</div>
+        <div class="trial-title" style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <span>{{ trial.title }}</span>
+          <a href="/trial/{{ trial.id }}" class="btn btn-outline" style="text-decoration: none; font-size: 13px; color: #0d9488; border: 1px solid #0d9488; padding: 4px 8px; border-radius: 6px;">View Details</a>
+        </div>
         <p>{{ trial.description }}</p>
 
         <div class="trial-eligibility">
@@ -236,7 +239,11 @@
       input.value = "";
 
       const box = document.getElementById("chatMessages");
-      box.innerHTML += `<div style="margin-bottom:8px;">🧑 ${text}</div>`;
+      const userDiv = document.createElement("div");
+      userDiv.style.marginBottom = "8px";
+      userDiv.textContent = "🧑 " + text;
+      box.appendChild(userDiv);
+
       chatHistory.push({ role: "user", content: text });
 
       const res = await fetch("/chat", {
@@ -246,7 +253,11 @@
       });
 
       const data = await res.json();
-      box.innerHTML += `<div style="margin-bottom:8px;">🤖 ${data.reply}</div>`;
+      const botDiv = document.createElement("div");
+      botDiv.style.marginBottom = "8px";
+      botDiv.innerHTML = "🤖 " + data.reply;
+      box.appendChild(botDiv);
+
       chatHistory.push({ role: "assistant", content: data.reply });
       box.scrollTop = box.scrollHeight;
     }
